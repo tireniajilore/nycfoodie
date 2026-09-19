@@ -50,9 +50,10 @@ server.registerTool(
       "The full picture for one restaurant in a single call: review summary, hours, rating, reservation link.",
     inputSchema: {
       id: z.string().describe("Canonical restaurant id"),
+      city: cityParam,
     },
   },
-  async ({ id }) => stub(`${NOT_READY} Got get_restaurant(id=${id}).`)
+  async ({ id, city }) => stub(`${NOT_READY} Got get_restaurant(id=${id}, city=${city}).`)
 );
 
 server.registerTool(
