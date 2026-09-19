@@ -95,6 +95,15 @@ address, geo, priceRange, servesCuisine) as a third fallback.
   (which collection holds the ordered entries and how each resolves to a
   `PostReview`/venue). Fetch one guide's `/_next/data/…/guides/{slug}.json`
   during the crawler build and confirm before finalising the schema.
+- **RESOLVED 2026-09-19** (verified live on
+  `/new-york/guides/best-birthday-restaurants-nyc`): the guide's
+  `postReviewCollection`-equivalent is `postGuideCollection` →
+  `contentV2BodyCollection` → ordered `Caption` items; each entry's `review`
+  field holds the embedded `PostReview` (`slug.name`, `title`, `venue`,
+  `rating`, `canonicalPath`). Position = array order (1-based). The entry
+  blurb is the `Caption`'s `content` rich text. `source_key` for listings is
+  the URL slug (`slugName`), which is the cross-reference between search
+  results, guide entries and page URLs.
 
 ## 4. Taxonomy = occasions/vibes source
 

@@ -52,7 +52,7 @@ export interface RawPostReview {
   publishedTimestamp?: string;
   updateTimestamp?: string;
   pageViewCount?: number;
-  reservationTipsText?: string;
+  reservationTipsText?: string | string[];
   communityScores?: {
     aggregateSurveyOverallScore?: number;
     surveyRecordCount?: number;
