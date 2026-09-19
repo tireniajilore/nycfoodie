@@ -321,3 +321,27 @@ export function createMcpServer(): McpServer {
   );
   return server;
 }
+
+/**
+ * Admin-only read-back of submitted feedback. Deliberately NOT an MCP tool:
+ * feedback must not be visible to every agent using the server. Served over
+ * HTTP at GET /admin/feedback, behind FEEDBACK_ADMIN_TOKEN.
+ */
+export function readFeedback(limit = 50, since?: string): Record<string, unknown>[] {
+  const lim = Math.min(Math.max(Math.floor(limit) || 50, 1), 200);
+  const rows =
+    since !== undefined
+      ? db
+          .prepare(
+            `SELECT id, created_at, tool_name, rating, comment FROM feedback
+             WHERE created_at > ? ORDER BY created_at DESC LIMIT ?`
+          )
+          .all(since, lim)
+      : db
+          .prepare(
+            `SELECT id, created_at, tool_name, rating, comment FROM feedback
+             ORDER BY created_at DESC LIMIT ?`
+          )
+          .all(lim);
+  return rows as Record<string, unknown>[];
+}

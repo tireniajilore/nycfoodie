@@ -8,15 +8,20 @@
 // Env:
 //   PORT            listen port (default 3000)
 //   RATE_LIMIT_RPM  max requests per minute per IP (default 120, 0 disables)
+//   FEEDBACK_ADMIN_TOKEN  bearer token for GET /admin/feedback (unset = disabled)
 
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { timingSafeEqual } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { createMcpServer } from "./server.js";
+import { createMcpServer, readFeedback } from "./server.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
 const RPM = Number(process.env.RATE_LIMIT_RPM ?? 120);
 const MAX_BODY_BYTES = 1_000_000;
+// Admin token for GET /admin/feedback (read-back of submitted feedback).
+// Never exposed as an MCP tool; set FEEDBACK_ADMIN_TOKEN on the host.
+const ADMIN_TOKEN = process.env.FEEDBACK_ADMIN_TOKEN ?? "";
 
 // --- tiny fixed-window rate limiter (per IP, in-memory) ---
 const windows = new Map<string, { count: number; reset: number }>();
@@ -181,6 +186,41 @@ function handleLanding(res: ServerResponse): void {
   res.end(LANDING_HTML);
 }
 
+/**
+ * Admin-only read-back of submitted feedback. Token via ?token= or
+ * Authorization: Bearer. Deliberately not an MCP tool: feedback must not be
+ * visible to every agent using the server.
+ */
+function handleAdminFeedback(
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL
+): void {
+  const header = req.headers.authorization ?? "";
+  const token =
+    url.searchParams.get("token") ??
+    (header.toLowerCase().startsWith("bearer ") ? header.slice(7) : "");
+  const expected = Buffer.from(ADMIN_TOKEN);
+  const actual = Buffer.from(token);
+  if (
+    !ADMIN_TOKEN ||
+    actual.length !== expected.length ||
+    !timingSafeEqual(actual, expected)
+  ) {
+    res.writeHead(401, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "unauthorized" }));
+    return;
+  }
+  const limit = Math.min(
+    Math.max(Number(url.searchParams.get("limit") ?? 50) || 50, 1),
+    200
+  );
+  const since = url.searchParams.get("since") ?? undefined;
+  const entries = readFeedback(limit, since);
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify({ count: entries.length, entries }));
+}
+
 const httpServer = createServer((req, res) => {
   cors(res);
   const ip = req.socket.remoteAddress ?? "unknown";
@@ -212,6 +252,10 @@ const httpServer = createServer((req, res) => {
   if (url.pathname === "/robots.txt" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
     res.end(ROBOTS_TXT);
+    return;
+  }
+  if (url.pathname === "/admin/feedback" && req.method === "GET") {
+    handleAdminFeedback(req, res, url);
     return;
   }
   if (url.pathname === "/mcp" && (req.method === "POST" || req.method === "GET")) {
