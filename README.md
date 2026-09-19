@@ -9,8 +9,21 @@ MVP city: New York. The city is a parameter everywhere; nothing NYC-specific is 
 Hosted endpoint (Streamable HTTP): `https://nycfoodie-production.up.railway.app/mcp`
 
 - **Cursor** — [one-click install](cursor://anysphere.cursor-deeplink/mcp/install?name=nycfoodie&config=eyJ1cmwiOiAiaHR0cHM6Ly9ueWNmb29kaWUtcHJvZHVjdGlvbi51cC5yYWlsd2F5LmFwcC9tY3AifQ==)
-- **Claude Code / any MCP client** — add the URL above as a remote MCP server (Streamable HTTP). No auth, no install.
+- **Claude Code** — `claude mcp add --transport http nycfoodie https://nycfoodie-production.up.railway.app/mcp`
+- **Windsurf / Cline / Roo Code / Zed / VS Code** — add to your MCP config:
+
+```json
+{
+  "mcpServers": {
+    "nycfoodie": {
+      "url": "https://nycfoodie-production.up.railway.app/mcp"
+    }
+  }
+}
+```
+
 - **Claude (app)** — Settings → Connectors → Add custom connector → paste the URL.
+- **Any MCP client** — add the URL above as a remote server (Streamable HTTP). No auth, no install.
 
 ### Tools
 
