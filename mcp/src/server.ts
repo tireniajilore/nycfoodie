@@ -133,7 +133,7 @@ export function createMcpServer(): McpServer {
 
   const filterShape = {
     cuisine: z.string().optional().describe("e.g. 'Italian', 'ramen'"),
-    neighborhood: z.string().optional().describe("e.g. 'West Village'"),
+    neighborhood: z.string().optional().describe("e.g. 'West Village', or a borough like 'Brooklyn'"),
     occasion: z.string().optional().describe("e.g. 'date night', 'group dinner'"),
     min_rating: z.number().min(0).max(10).optional().describe("Minimum Infatuation rating"),
     price_tier: z.number().int().min(1).max(4).optional().describe("1 ($) to 4 ($$$$)"),

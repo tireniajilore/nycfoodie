@@ -41,6 +41,88 @@ function likeEscape(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
+/** Throw a clear error for unsupported cities instead of silently returning []. */
+function requireCity(db: Database, city: string): void {
+  const row = db.prepare("SELECT slug FROM cities WHERE slug = ?").get(city) as
+    | { slug: string }
+    | undefined;
+  if (!row) {
+    const supported = (
+      db.prepare("SELECT slug FROM cities ORDER BY 1").all() as { slug: string }[]
+    ).map((r) => r.slug);
+    throw new Error(
+      `Unsupported city '${city}'. Supported: ${supported.join(", ") || "(none)"}.`
+    );
+  }
+}
+
+// Borough → neighborhood tag labels. A neighborhood filter naming a borough
+// expands to all of its neighborhoods, so "Brooklyn" includes Williamsburg,
+// Fort Greene, Bed-Stuy, etc. — not just labels containing the word "Brooklyn".
+const BOROUGHS: Record<string, string[]> = {
+  manhattan: [
+    "Alphabet City", "Chelsea", "Chinatown", "Columbus Circle", "East Harlem",
+    "East Village", "Financial District", "Flatiron", "Garment District",
+    "Governors Island", "Gramercy", "Greenwich Village", "Harlem",
+    "Hell's Kitchen", "Hudson Square", "Hudson Yards", "Inwood", "Kips Bay",
+    "Koreatown", "Little Italy", "Lower East Side", "Meatpacking District",
+    "Midtown", "Midtown East", "Midtown West", "Morningside Heights",
+    "Murray Hill", "NOHO", "Nolita", "Nomad", "Soho", "South Street Seaport",
+    "Times Square", "Tribeca", "Two Bridges", "Union Square", "Upper East Side",
+    "Upper West Side", "Washington Heights", "West Harlem", "West Village",
+  ],
+  brooklyn: [
+    "Bath Beach", "Bay Ridge", "Bedford-Stuyvesant", "Bensonhurst",
+    "Boerum Hill", "Borough Park", "Brighton Beach", "Broadway Junction",
+    "Brooklyn", "Brooklyn Heights", "Brooklyn Navy Yard", "Brownsville",
+    "Bushwick", "Canarsie", "Carroll Gardens", "City Line", "Clinton Hill",
+    "Cobble Hill", "Coney Island", "Crown Heights", "Cypress Hills", "DUMBO",
+    "Ditmas Park", "Downtown Brooklyn", "Dyker Heights", "East Flatbush",
+    "East Williamsburg", "Flatbush", "Fort Greene", "Gowanus", "Gravesend",
+    "Greenpoint", "Greenwood Heights", "Kensington", "Mapleton", "Marine Park",
+    "Midwood", "New Lots", "Park Slope", "Prospect Heights",
+    "Prospect Lefferts Gardens", "Red Hook", "Sheepshead Bay", "Sunset Park",
+    "Williamsburg", "Windsor Terrace",
+  ],
+  queens: [
+    "Arverne", "Astoria", "Auburndale", "Bayside", "Broad Channel",
+    "College Point", "Corona", "Elmhurst", "Far Rockaway", "Floral Park",
+    "Flushing", "Forest Hills", "Fresh Meadows", "Glendale", "Howard Beach",
+    "Jackson Heights", "JFK Airport", "LaGuardia Airport", "Lindenwood",
+    "Long Island City", "Middle Village", "Murray Hill, Queens", "Ozone Park",
+    "Pomonok", "Queens", "Rego Park", "Ridgewood", "Rockaway Beach",
+    "Rockaway Park", "South Ozone Park", "South Richmond Hill", "Sunnyside",
+    "Whitestone", "Woodhaven", "Woodside",
+  ],
+  bronx: [
+    "Belmont", "Castle Hill", "City Island", "Concourse", "Crotona",
+    "Fieldston", "Fordham", "Highbridge", "Kingsbridge", "Melrose",
+    "Morris Park", "Mott Haven", "Parkchester", "Pelham Bay", "Port Morris",
+    "Riverdale", "Soundview", "South Bronx", "The Bronx", "Throggs Neck",
+    "Unionport", "University Heights", "Van Nest", "Wakefield",
+    "Westchester Square", "Williamsbridge/East Bronx",
+  ],
+  "the bronx": [
+    "Belmont", "Castle Hill", "City Island", "Concourse", "Crotona",
+    "Fieldston", "Fordham", "Highbridge", "Kingsbridge", "Melrose",
+    "Morris Park", "Mott Haven", "Parkchester", "Pelham Bay", "Port Morris",
+    "Riverdale", "Soundview", "South Bronx", "The Bronx", "Throggs Neck",
+    "Unionport", "University Heights", "Van Nest", "Wakefield",
+    "Westchester Square", "Williamsbridge/East Bronx",
+  ],
+  "staten island": [
+    "Brighton Heights", "Castleton Corners", "Charleston", "Dongan Hills",
+    "Great Kills", "Heartland Village", "New Dorp", "New Springville",
+    "Port Richmond", "St. George", "Stapleton Heights", "Staten Island",
+    "Tompkinsville", "West New Brighton",
+  ],
+};
+
+/** If the value names a borough, return its neighborhood labels; else null. */
+function boroughNeighborhoods(value: string): string[] | null {
+  return BOROUGHS[value.trim().toLowerCase()] ?? null;
+}
+
 function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
   const r = 6371;
   const dLat = ((bLat - aLat) * Math.PI) / 180;
@@ -89,7 +171,20 @@ function buildWhere(f: Filters, params: unknown[]): string {
     params.push(kind, `%${likeEscape(value)}%`);
   };
   if (f.cuisine) tagFilter("cuisine", f.cuisine);
-  if (f.neighborhood) tagFilter("neighborhood", f.neighborhood);
+  if (f.neighborhood) {
+    const borough = boroughNeighborhoods(f.neighborhood);
+    if (borough) {
+      // Borough expansion: match any of its neighborhoods.
+      const ors = borough.map(() => `t.label LIKE ? ESCAPE '\\'`).join(" OR ");
+      conds.push(
+        `EXISTS (SELECT 1 FROM listing_tags lt JOIN tags t ON t.id = lt.tag_id
+          WHERE lt.source_listing_id = pl.id AND t.kind = 'neighborhood' AND (${ors}))`
+      );
+      for (const n of borough) params.push(`%${likeEscape(n)}%`);
+    } else {
+      tagFilter("neighborhood", f.neighborhood);
+    }
+  }
   if (f.occasion) tagFilter("occasion", f.occasion);
   if (f.query) {
     for (const tok of f.query.split(/\s+/).filter(Boolean)) {
@@ -155,6 +250,7 @@ export function searchRestaurants(
   limit = 10,
   sort: "rating" | "guides" | "distance" = "rating"
 ): Record<string, unknown>[] {
+  requireCity(db, f.city);
   const params: unknown[] = [];
   const where = buildWhere(f, params);
   const order =
@@ -211,6 +307,7 @@ export function getRestaurant(
   idOrName: string,
   includeProse = false
 ): Record<string, unknown> | null {
+  requireCity(db, city);
   const r = resolveRestaurant(db, city, idOrName);
   if (!r) return null;
   const row = db
@@ -295,6 +392,7 @@ export function compareRestaurants(
   city: string,
   idsOrNames: string[]
 ): Record<string, unknown>[] {
+  requireCity(db, city);
   return idsOrNames.map((s) => {
     const r = resolveRestaurant(db, city, s);
     if (!r) return { query: s, found: false };
@@ -324,6 +422,7 @@ export function findGuides(
   query: string | undefined,
   limit = 5
 ): Record<string, unknown>[] {
+  requireCity(db, city);
   const params: unknown[] = [city];
   let where = "g.city_slug = ?";
   if (query) {
@@ -359,6 +458,7 @@ export function findSimilar(
   idOrName: string,
   limit = 10
 ): Record<string, unknown>[] | null {
+  requireCity(db, city);
   const r = resolveRestaurant(db, city, idOrName);
   if (!r) return null;
   const mine = db
@@ -415,12 +515,20 @@ export function guideConsensus(
   theme: string | undefined,
   limit = 10
 ): Record<string, unknown>[] {
+  requireCity(db, city);
   const params: unknown[] = [city];
   let themeCond = "";
   if (theme) {
-    themeCond = "AND (g.title LIKE ? ESCAPE '\\' OR g.summary LIKE ? ESCAPE '\\')";
+    // Theme must match the guide text AND a tag on the restaurant itself.
+    // Otherwise venues that merely appear in a textually-matching guide get
+    // padded into themed results (e.g. non-ramen spots in "ramen" results).
+    themeCond = `AND (g.title LIKE ? ESCAPE '\\' OR g.summary LIKE ? ESCAPE '\\')
+      AND EXISTS (SELECT 1 FROM listing_tags lt2 JOIN tags t2 ON t2.id = lt2.tag_id
+        JOIN source_listings slt ON slt.id = lt2.source_listing_id
+        WHERE slt.restaurant_id = r.id AND slt.source_slug = '${SOURCE}'
+          AND t2.label LIKE ? ESCAPE '\\')`;
     const p = `%${likeEscape(theme)}%`;
-    params.push(p, p);
+    params.push(p, p, p);
   }
   // Two-phase: (1) cheap guide-count ranking over all restaurants — no
   // per-restaurant subqueries; (2) details only for the top rows including
