@@ -7,7 +7,7 @@
 //  - Feedback table: structured rows from the submit_feedback tool.
 
 import { appendFileSync } from "node:fs";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Database } from "better-sqlite3";
 
 export interface CallEntry {
@@ -36,6 +36,45 @@ export interface FeedbackInput {
   tool_name?: string;
   rating?: number;
   comment?: string;
+}
+
+/**
+ * Anonymised client fingerprint: SHA-256 of "ip|user-agent", truncated to
+ * 16 hex chars. Distinct clients can be counted; the value cannot be
+ * reversed into an IP or device string.
+ */
+export function hashClient(ip: string, userAgent: string): string {
+  return createHash("sha256").update(`${ip}|${userAgent}`).digest("hex").slice(0, 16);
+}
+
+export interface UsageEntry {
+  ts: string;
+  tool: string;
+  city: string | null;
+  clientHash: string | null;
+  latencyMs: number;
+  ok: boolean;
+}
+
+/**
+ * Insert one usage row. Never throws — telemetry must not break serving.
+ */
+export function recordUsage(db: Database, entry: UsageEntry): void {
+  try {
+    db.prepare(
+      `INSERT INTO usage_log (ts, tool, city, client_hash, latency_ms, ok)
+       VALUES (?, ?, ?, ?, ?, ?)`
+    ).run(
+      entry.ts,
+      entry.tool,
+      entry.city,
+      entry.clientHash,
+      entry.latencyMs,
+      entry.ok ? 1 : 0
+    );
+  } catch {
+    // Telemetry failure is silent by design.
+  }
 }
 
 /** Insert a feedback row; throws on invalid input (caller reports it). */

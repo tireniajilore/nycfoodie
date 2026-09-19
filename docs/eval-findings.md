@@ -152,3 +152,34 @@ ROOT-CAUSE THESIS from evaluator: the server fills the requested limit
 whether or not it has signal (borough omission, city-slug silence, geo drop,
 consensus padding, find_similar noise); suggests a shared policy — fewer
 results or a confidence field — rather than per-tool fixes.
+
+## Resolution — commit 6174a2d (2026-09-19, pushed, Railway redeploy pending)
+All Round 2 + Round 3 items addressed:
+- 008_listing_text_fts.sql: FTS5 over review prose + guide blurbs with sync
+  triggers; query tokens also match FTS. 'cacio e pepe' -> Via Carota, Lilia...
+- Geo: lone lat/lng/radius_km now throws; lat+lng defaults radius to 5 km;
+  points outside (30 km + radius) of Manhattan get a coverage error, not [].
+- Coverage: city='new-york' discovery (search/top_rated/find_similar)
+  scoped to 30 km around Manhattan; La Bastide gone from top French.
+- find_similar: unmatched tags score 0 (was ELSE 1); La Bastide seed now
+  returns French venues (similarity 3 = one shared cuisine tag).
+- Neighborhood filter (+ borough expansion) matches across all listings;
+  L'industrie found under Little Italy.
+- Canonical collapsed neighborhood (primary listing, deduped, alphabetical)
+  shared by cards/get/compare; cuisines deduped everywhere.
+- booking is {policy, notes}|null and reservation an object|null in all
+  tools (was string/object/boolean across tools).
+- review.headline falls back to truncated summary (LaRina fixed).
+- 009_entity_dedup.sql: merged 12 curly/straight-apostrophe dup restaurant
+  rows; L'industrie is one row with three listings; crawler match-or-create
+  folds quotes going forward; all names normalised to straight quotes.
+- 'group dinner': no code change — the occasion vocabulary was already
+  documented in the tool description; the phrase appears only as landing-
+  page conversational copy, not as a schema example.
+- Transient 5xx + guide_appearances wobble: treated as deploy noise, no action.
+Verified locally against nycfoodie.db; verified live on production 2026-09-19:
+- "cacio e pepe" -> Via Carota, Lilia, Mama's Too, Misi, L'Artusi
+- top_rated French: La Bastide gone (Le Veau d'Or, Le Bernardin top)
+- find_similar La Bastide -> French venues, similarity 3, no NY Dosas
+- geo lat+lng without radius -> distance_km returned (5 km default)
+- card booking shape is {policy, notes} live.

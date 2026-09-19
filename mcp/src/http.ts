@@ -14,7 +14,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { timingSafeEqual } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
-import { createMcpServer, readFeedback } from "./server.js";
+import { createMcpServer, readFeedback, readUsageStats } from "./server.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
 const RPM = Number(process.env.RATE_LIMIT_RPM ?? 120);
@@ -73,7 +73,16 @@ function cors(res: ServerResponse): void {
 
 async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<void> {
   // One server + transport per request (stateless mode).
-  const server: McpServer = createMcpServer();
+  // Client fingerprint inputs for privacy-respecting usage analytics
+  // (hashed, never stored raw). Behind Railway's proxy the real client IP
+  // arrives in X-Forwarded-For.
+  const fwd = req.headers["x-forwarded-for"];
+  const clientIp =
+    (typeof fwd === "string" ? fwd.split(",")[0].trim() : "") ||
+    req.socket.remoteAddress ||
+    "unknown";
+  const userAgent = req.headers["user-agent"] ?? "";
+  const server: McpServer = createMcpServer({ clientIp, userAgent });
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on("close", () => {
     transport.close().catch(() => undefined);
@@ -194,30 +203,43 @@ function handleLanding(res: ServerResponse): void {
 }
 
 /**
- * Admin-only read-back of submitted feedback. Token via ?token= or
- * Authorization: Bearer. Deliberately not an MCP tool: feedback must not be
- * visible to every agent using the server.
+ * Admin-only endpoints. Token via ?token= or Authorization: Bearer.
+ * Deliberately not MCP tools: feedback and usage data must not be visible
+ * to every agent using the server.
  */
-function handleAdminFeedback(
-  req: IncomingMessage,
-  res: ServerResponse,
-  url: URL
-): void {
+function adminAuthorized(req: IncomingMessage, url: URL): boolean {
   const header = req.headers.authorization ?? "";
   const token =
     url.searchParams.get("token") ??
     (header.toLowerCase().startsWith("bearer ") ? header.slice(7) : "");
   const expected = Buffer.from(ADMIN_TOKEN);
   const actual = Buffer.from(token);
-  if (
-    !ADMIN_TOKEN ||
-    actual.length !== expected.length ||
-    !timingSafeEqual(actual, expected)
-  ) {
+  return (
+    !!ADMIN_TOKEN &&
+    actual.length === expected.length &&
+    timingSafeEqual(actual, expected)
+  );
+}
+
+function requireAdmin(
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL
+): boolean {
+  if (!adminAuthorized(req, url)) {
     res.writeHead(401, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ error: "unauthorized" }));
-    return;
+    return false;
   }
+  return true;
+}
+
+function handleAdminFeedback(
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL
+): void {
+  if (!requireAdmin(req, res, url)) return;
   const limit = Math.min(
     Math.max(Number(url.searchParams.get("limit") ?? 50) || 50, 1),
     200
@@ -226,6 +248,97 @@ function handleAdminFeedback(
   const entries = readFeedback(limit, since);
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(JSON.stringify({ count: entries.length, entries }));
+}
+
+function escHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+}
+
+/** Server-rendered usage dashboard (no JS, no external assets). */
+function handleAdminUsage(req: IncomingMessage, res: ServerResponse, url: URL): void {
+  if (!requireAdmin(req, res, url)) return;
+  const days = Math.min(Math.max(Number(url.searchParams.get("days") ?? 30) || 30, 1), 180);
+  const stats = readUsageStats(days);
+  const maxDay = Math.max(1, ...stats.per_day.map((d) => d.calls));
+  const maxTool = Math.max(1, ...stats.per_tool.map((t) => t.calls));
+  const dayRows = stats.per_day
+    .map(
+      (d) => `<div class="brow"><span class="bday">${escHtml(d.day)}</span>
+        <span class="bbar"><span style="width:${Math.round((d.calls / maxDay) * 100)}%"></span></span>
+        <span class="bnum">${d.calls} calls · ${d.clients} clients</span></div>`
+    )
+    .join("");
+  const toolRows = stats.per_tool
+    .map(
+      (t) => `<div class="brow"><span class="bday">${escHtml(t.tool)}</span>
+        <span class="bbar"><span style="width:${Math.round((t.calls / maxTool) * 100)}%"></span></span>
+        <span class="bnum">${t.calls}</span></div>`
+    )
+    .join("");
+  const recentRows = stats.recent
+    .map(
+      (r) => `<tr><td>${escHtml(r.ts.replace("T", " ").slice(0, 19))}</td>
+        <td>${escHtml(r.tool)}</td><td>${escHtml(r.city ?? "—")}</td>
+        <td>${r.latency_ms ?? "—"} ms</td><td>${r.ok ? "ok" : "error"}</td></tr>`
+    )
+    .join("");
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NYCfoodie usage</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1.5rem; line-height: 1.5; color: #1a1a1a; }
+  h1 { font-size: 1.5rem; } h2 { font-size: 1.1rem; margin-top: 2rem; }
+  .cards { display: flex; gap: 1rem; flex-wrap: wrap; margin: 1rem 0 0.5rem; }
+  .card { border: 1px solid #e2e2e2; border-radius: 10px; padding: 0.8rem 1.1rem; min-width: 130px; }
+  .card .v { font-size: 1.6rem; font-weight: 700; }
+  .card .l { color: #666; font-size: 0.8rem; }
+  .brow { display: flex; align-items: center; gap: 0.6rem; margin: 0.28rem 0; font-size: 0.85rem; }
+  .bday { width: 150px; flex: none; color: #444; font-variant-numeric: tabular-nums; }
+  .bbar { flex: 1; background: #f0f0f0; border-radius: 4px; height: 14px; overflow: hidden; }
+  .bbar span { display: block; height: 100%; background: #2f7de1; border-radius: 4px; }
+  .bnum { width: 170px; flex: none; text-align: right; color: #444; font-variant-numeric: tabular-nums; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.85rem; margin-top: 0.5rem; }
+  th, td { text-align: left; padding: 0.35rem 0.5rem; border-bottom: 1px solid #eee; }
+  th { color: #666; font-weight: 600; }
+  .note { color: #777; font-size: 0.82rem; margin-top: 2rem; }
+</style>
+</head>
+<body>
+<h1>NYCfoodie usage</h1>
+<div class="cards">
+  <div class="card"><div class="v">${stats.total_calls}</div><div class="l">tool calls, last ${stats.days} days</div></div>
+  <div class="card"><div class="v">${stats.distinct_clients}</div><div class="l">distinct clients, last ${stats.days} days</div></div>
+  <div class="card"><div class="v">${stats.calls_today}</div><div class="l">calls today</div></div>
+</div>
+<h2>Calls per day</h2>
+${dayRows || "<p>No usage recorded yet.</p>"}
+<h2>Calls per tool</h2>
+${toolRows || "<p>No usage recorded yet.</p>"}
+<h2>Recent calls</h2>
+<table><thead><tr><th>Time (UTC)</th><th>Tool</th><th>City</th><th>Latency</th><th>Status</th></tr></thead>
+<tbody>${recentRows || '<tr><td colspan="5">No usage recorded yet.</td></tr>'}</tbody></table>
+<p class="note">Clients are counted by an anonymised fingerprint (a truncated hash of IP + user agent), so the
+client count is an approximation of people, not an exact headcount — MCP clients don't identify users.
+No query text, IPs or user agents are stored.</p>
+</body>
+</html>`;
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  res.end(html);
+}
+
+/** JSON form of the usage stats, for scripting. */
+function handleAdminUsageJson(
+  req: IncomingMessage,
+  res: ServerResponse,
+  url: URL
+): void {
+  if (!requireAdmin(req, res, url)) return;
+  const days = Math.min(Math.max(Number(url.searchParams.get("days") ?? 30) || 30, 1), 180);
+  res.writeHead(200, { "Content-Type": "application/json" });
+  res.end(JSON.stringify(readUsageStats(days)));
 }
 
 const httpServer = createServer((req, res) => {
@@ -268,6 +381,14 @@ const httpServer = createServer((req, res) => {
   }
   if (url.pathname === "/admin/feedback" && req.method === "GET") {
     handleAdminFeedback(req, res, url);
+    return;
+  }
+  if (url.pathname === "/admin/usage" && req.method === "GET") {
+    handleAdminUsage(req, res, url);
+    return;
+  }
+  if (url.pathname === "/admin/usage.json" && req.method === "GET") {
+    handleAdminUsageJson(req, res, url);
     return;
   }
   if (url.pathname === "/mcp" && (req.method === "POST" || req.method === "GET")) {

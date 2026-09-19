@@ -22,7 +22,7 @@ import {
   topRated,
   type Filters,
 } from "./queries.js";
-import { createCallLogger, saveFeedback, type CallLogger } from "./telemetry.js";
+import { createCallLogger, hashClient, recordUsage, saveFeedback, type CallLogger } from "./telemetry.js";
 
 const dbPath =
   process.env.NYCFOODIE_DB ?? new URL("../../nycfoodie.db", import.meta.url).pathname;
@@ -44,6 +44,15 @@ openDb(dbPath);
 const writeDb = getDb();
 const db = openReadDb(dbPath);
 
+// Bounded retention for usage analytics: keep 180 days.
+try {
+  const cutoff = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString();
+  writeDb.prepare("DELETE FROM usage_log WHERE ts < ?").run(cutoff);
+} catch {
+  // Table may not exist on very old databases before migration runs; migrate()
+  // already ran above, so this is just defensive.
+}
+
 const log: CallLogger = createCallLogger(logPath);
 log({
   ts: new Date().toISOString(),
@@ -53,21 +62,45 @@ log({
   ok: true,
 });
 
+/** Request-scoped context for the MCP server (HTTP transport). */
+export interface McpServerOptions {
+  /** Client IP as seen by the HTTP layer (never stored raw). */
+  clientIp?: string;
+  /** Client user-agent as seen by the HTTP layer (never stored raw). */
+  userAgent?: string;
+}
+
 /** Build a fully-registered MCP server. One instance per transport. */
-export function createMcpServer(): McpServer {
+export function createMcpServer(opts: McpServerOptions = {}): McpServer {
   const server = new McpServer({ name: "nycfoodie", version: "0.1.0" });
+  const clientHash =
+    opts.clientIp != null ? hashClient(opts.clientIp, opts.userAgent ?? "") : null;
 
   function json(data: unknown) {
     return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
   }
 
-  /** Wrap a tool handler with call logging (timing, args, errors). */
+  /** Wrap a tool handler with call logging (timing, args, errors) plus a
+   *  privacy-respecting usage row (tool, city, client fingerprint — no args). */
   function logged<TArgs extends Record<string, unknown>, TResult>(
     name: string,
     fn: (args: TArgs) => Promise<TResult>
   ): (args: TArgs) => Promise<TResult> {
     return async (args: TArgs) => {
       const start = Date.now();
+      const city =
+        typeof (args as Record<string, unknown>).city === "string"
+          ? ((args as Record<string, unknown>).city as string)
+          : null;
+      const usage = (ok: boolean) =>
+        recordUsage(writeDb, {
+          ts: new Date().toISOString(),
+          tool: name,
+          city,
+          clientHash,
+          latencyMs: Date.now() - start,
+          ok,
+        });
       try {
         const result = await fn(args);
         log({
@@ -78,6 +111,7 @@ export function createMcpServer(): McpServer {
           ok: true,
           result_bytes: JSON.stringify(result).length,
         });
+        usage(true);
         return result;
       } catch (e) {
         log({
@@ -88,6 +122,7 @@ export function createMcpServer(): McpServer {
           ok: false,
           error: String(e).slice(0, 500),
         });
+        usage(false);
         throw e;
       }
     };
@@ -367,4 +402,66 @@ export function readFeedback(limit = 50, since?: string): Record<string, unknown
           )
           .all(lim);
   return rows as Record<string, unknown>[];
+}
+
+export interface UsageStats {
+  days: number;
+  since: string;
+  total_calls: number;
+  distinct_clients: number;
+  calls_today: number;
+  per_day: { day: string; calls: number; clients: number }[];
+  per_tool: { tool: string; calls: number }[];
+  recent: { ts: string; tool: string; city: string | null; latency_ms: number | null; ok: number }[];
+}
+
+/**
+ * Admin-only usage analytics. Deliberately NOT an MCP tool: usage data must
+ * not be visible to every agent using the server. Served over HTTP at
+ * GET /admin/usage(.json), behind FEEDBACK_ADMIN_TOKEN.
+ *
+ * "Distinct clients" counts distinct anonymised client fingerprints — an
+ * approximation of people, not an exact headcount (MCP clients don't
+ * identify users).
+ */
+export function readUsageStats(days = 30): UsageStats {
+  const d = Math.min(Math.max(Math.floor(days) || 30, 1), 180);
+  const since = new Date(Date.now() - d * 24 * 60 * 60 * 1000).toISOString();
+  const today = new Date().toISOString().slice(0, 10);
+  const total = db
+    .prepare("SELECT COUNT(*) AS c, COUNT(DISTINCT client_hash) AS u FROM usage_log WHERE ts >= ?")
+    .get(since) as { c: number; u: number };
+  const callsToday = (
+    db.prepare("SELECT COUNT(*) AS c FROM usage_log WHERE substr(ts, 1, 10) = ?").get(today) as {
+      c: number;
+    }
+  ).c;
+  const perDay = db
+    .prepare(
+      `SELECT substr(ts, 1, 10) AS day, COUNT(*) AS calls, COUNT(DISTINCT client_hash) AS clients
+       FROM usage_log WHERE ts >= ? GROUP BY day ORDER BY day`
+    )
+    .all(since) as { day: string; calls: number; clients: number }[];
+  const perTool = db
+    .prepare(
+      `SELECT tool, COUNT(*) AS calls FROM usage_log WHERE ts >= ?
+       GROUP BY tool ORDER BY calls DESC`
+    )
+    .all(since) as { tool: string; calls: number }[];
+  const recent = db
+    .prepare(
+      `SELECT ts, tool, city, latency_ms, ok FROM usage_log
+       ORDER BY id DESC LIMIT 50`
+    )
+    .all() as UsageStats["recent"];
+  return {
+    days: d,
+    since,
+    total_calls: total.c,
+    distinct_clients: total.u,
+    calls_today: callsToday,
+    per_day: perDay,
+    per_tool: perTool,
+    recent,
+  };
 }
