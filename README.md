@@ -1,5 +1,7 @@
 # NYCfoodie
 
+[![NYCfoodie MCP connector – tool definition quality and endpoint health on Glama](https://glama.ai/mcp/connectors/app.railway.up.nycfoodie-production/nycfoodie/badges/score.svg)](https://glama.ai/mcp/connectors/app.railway.up.nycfoodie-production/nycfoodie)
+
 The data layer for restaurant taste: structured, editorial restaurant recommendations served to AI agents over MCP. Not another review scraper — curated guides and reviews normalised into one schema, queryable by tools.
 
 MVP city: New York. The city is a parameter everywhere; nothing NYC-specific is hardcoded.
