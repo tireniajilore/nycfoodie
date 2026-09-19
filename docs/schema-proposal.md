@@ -79,9 +79,9 @@ CREATE TABLE IF NOT EXISTS source_listings (
   review_count INTEGER,             -- source-native count of ratings (e.g. Google's total); NULL when the source doesn't publish one
   price_label TEXT,                 -- source-native, e.g. '$$'
   price_tier INTEGER CHECK (price_tier BETWEEN 1 AND 4),
-  price_per_head_min REAL,          -- all-in estimate per person, source-native where available
-  price_per_head_max REAL,
-  price_currency TEXT,              -- e.g. 'USD'
+  price_per_head_min REAL,          -- DEFERRED: populated by a future source (e.g. Google), not MVP extraction
+  price_per_head_max REAL,          -- DEFERRED: see above
+  price_currency TEXT,              -- DEFERRED: see above
   reservation_url TEXT,
   reservation_platform TEXT,        -- e.g. 'opentable', 'resy'
   booking_policy TEXT,              -- 'walk-in-only' | 'reservations-recommended' | 'reservations-required'; NULL = unknown
@@ -207,14 +207,16 @@ CREATE TABLE IF NOT EXISTS crawl_state (
   the crawler verifies a real source.
 - **Review count, line intel and price-per-head are nullable by design.**
   `review_count` is trivially populated wherever a source publishes one.
-  `booking_policy` / `typical_wait_minutes` / `wait_notes` and
-  `price_per_head_min` / `price_per_head_max` will *not* come from the
-  structured API — no source publishes them as fields. They get populated by
-  a prose-extraction step over review text at crawl time (Infatuation's
-  `reservationTipsText` is the seed for line intel; price mentions in prose
-  for per-head). The schema carries them now; the extractor lands with the
-  crawler. Explicitly out of scope: chef/kitchen-leadership fields and an
-  events layer — dropped per feedback, not deferred.
+  `booking_policy` / `typical_wait_minutes` / `wait_notes` will *not* come
+  from the structured API — no source publishes them as fields. They get
+  populated by a prose-extraction step over review text at crawl time
+  (Infatuation's `reservationTipsText` is the seed). The schema carries them
+  now; the extractor lands with the crawler.
+  `price_per_head_min` / `price_per_head_max` / `price_currency` are also
+  nullable columns, but per feedback their *population* is deferred to a
+  future source (e.g. Google) — no MVP extraction for prices.
+  Explicitly out of scope: chef/kitchen-leadership fields and an events
+  layer — dropped per feedback, not deferred.
 - **No full-text index yet.** `search_restaurants` will start on
   `LIKE`/equality over name, tags and city; an FTS5 virtual table is a
   follow-up migration once query patterns are real.
