@@ -373,3 +373,58 @@ export function recordCrawlState(
     )
     .run(SOURCE_SLUG, citySlug, collection, now(), lastCursor, itemCount, null);
 }
+
+export type { GooglePlaceMatch } from "./google/places.js";
+
+/** Write a Google Places verification result onto the canonical restaurant. */
+export function recordGoogleVerification(
+  restaurantId: number,
+  match: import("./google/places.js").GooglePlaceMatch,
+  checkedAt: string
+): void {
+  getDb()
+    .prepare(
+      `UPDATE restaurants
+       SET google_place_id = ?, google_business_status = ?,
+           google_match_confidence = ?, google_last_checked_at = ?
+       WHERE id = ?`
+    )
+    .run(match.placeId, match.businessStatus, match.confidence, checkedAt, restaurantId);
+}
+
+/** Mark a restaurant as checked-but-unmatched so it isn't retried immediately. */
+export function recordGoogleCheckedNoMatch(restaurantId: number, checkedAt: string): void {
+  getDb()
+    .prepare(`UPDATE restaurants SET google_last_checked_at = ? WHERE id = ?`)
+    .run(checkedAt, restaurantId);
+}
+
+/** Candidate venues for Google verification: have coordinates, not checked recently. */
+export function googleVerifyCandidates(
+  citySlug: string,
+  limit: number,
+  recheckDays: number
+): Array<{ id: number; name: string; lat: number; lng: number; best_rating: number | null }> {
+  return getDb()
+    .prepare(
+      `SELECT r.id, r.name, sl.latitude AS lat, sl.longitude AS lng,
+              MAX(rv.rating) AS best_rating
+       FROM restaurants r
+       JOIN source_listings sl ON sl.restaurant_id = r.id AND sl.source_slug = ?
+       JOIN cities c ON c.id = sl.city_id AND c.slug = ?
+       LEFT JOIN reviews rv ON rv.listing_id = sl.id
+       WHERE sl.latitude IS NOT NULL AND sl.longitude IS NOT NULL
+         AND (r.google_last_checked_at IS NULL
+              OR r.google_last_checked_at < datetime('now', '-' || ? || ' days'))
+       GROUP BY r.id
+       ORDER BY best_rating DESC, r.id
+       LIMIT ?`
+    )
+    .all(SOURCE_SLUG, citySlug, recheckDays, limit) as Array<{
+    id: number;
+    name: string;
+    lat: number;
+    lng: number;
+    best_rating: number | null;
+  }>;
+}

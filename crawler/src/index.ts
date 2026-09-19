@@ -8,7 +8,17 @@
 
 import { forEachSearchPage } from "./infatuation/graphql.js";
 import { enrichReview } from "./infatuation/pagedata.js";
-import { ensureCity, getCrawlCursor, initStore, recordCrawlState, upsertReviewListing } from "./store.js";
+import { verifyPlace, sleep as googleSleep, RECHECK_DAYS } from "./google/places.js";
+import {
+  ensureCity,
+  getCrawlCursor,
+  googleVerifyCandidates,
+  initStore,
+  recordCrawlState,
+  recordGoogleCheckedNoMatch,
+  recordGoogleVerification,
+  upsertReviewListing,
+} from "./store.js";
 import { closeDb } from "nycfoodie-db";
 import type { RawPostReview } from "./infatuation/types.js";
 
@@ -107,6 +117,9 @@ switch (cmd) {
   case "reviews":
     await cmdReviews();
     break;
+  case "google-verify":
+    await cmdGoogleVerify();
+    break;
   case undefined:
   case "help":
   case "--help":
@@ -114,15 +127,65 @@ switch (cmd) {
 
 Usage:
   nycfoodie-crawl reviews --city new-york [--max-pages N] [--write] [--enrich] [--db PATH]
+  nycfoodie-crawl google-verify --city new-york --limit N --db PATH
 
-Options:
+Options (reviews):
   --city       City slug (default: new-york)
   --max-pages  Cap on GraphQL pages fetched (default: 1)
   --write      Write to the database (default: dry run, no writes)
   --enrich     Also fetch page data for full prose/venue detail (implies slower run)
-  --db         SQLite path (default: ./nycfoodie.db)`);
+  --db         SQLite path (default: ./nycfoodie.db)
+
+Options (google-verify):
+  --limit      Max venues to check (default: 20). Highest-rated first.
+  --db         SQLite path (default: ./nycfoodie.db)
+  Requires GOOGLE_PLACES_API_KEY in the environment.`);
     break;
   default:
     console.error(`Unknown command: ${cmd}. Run \`nycfoodie-crawl help\`.`);
     process.exit(1);
+}
+
+/** Cross-check venues against Google Places business_status. Paid API — bounded by --limit. */
+async function cmdGoogleVerify(): Promise<void> {
+  const apiKey = process.env["GOOGLE_PLACES_API_KEY"];
+  if (!apiKey) {
+    console.error("GOOGLE_PLACES_API_KEY is not set. Aborting before spending anything.");
+    process.exit(1);
+  }
+  const dbPath = arg("--db") ?? "./nycfoodie.db";
+  const city = arg("--city") ?? "new-york";
+  const limit = Number(arg("--limit") ?? "20");
+  initStore(dbPath);
+  ensureCity(city, city === "new-york" ? "New York" : city);
+
+  const candidates = googleVerifyCandidates(city, limit, RECHECK_DAYS);
+  console.log(`${candidates.length} venue(s) due for Google verification.`);
+  let matched = 0;
+  let closed = 0;
+  for (const c of candidates) {
+    let match;
+    try {
+      match = await verifyPlace(apiKey, c.name, c.lat, c.lng);
+    } catch (e) {
+      const status = (e as { status?: number }).status;
+      console.error(`Places API error on "${c.name}" (HTTP ${status ?? "?"}). Stopping to avoid burn.`);
+      break;
+    }
+    const checkedAt = new Date().toISOString();
+    if (match) {
+      recordGoogleVerification(c.id, match, checkedAt);
+      matched++;
+      if (match.businessStatus && match.businessStatus !== "OPERATIONAL") closed++;
+      console.log(
+        `  ✓ ${c.name} → ${match.businessStatus ?? "unknown"} (${match.confidence}, ${match.distanceM}m)`
+      );
+    } else {
+      recordGoogleCheckedNoMatch(c.id, checkedAt);
+      console.log(`  · ${c.name} → no safe match`);
+    }
+    await googleSleep(500);
+  }
+  closeDb();
+  console.log(`Done: ${matched} matched, ${closed} non-operational flagged.`);
 }
