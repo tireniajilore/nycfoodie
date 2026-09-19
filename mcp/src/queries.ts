@@ -9,16 +9,19 @@ import type { Database } from "better-sqlite3";
 const SOURCE = "infatuation";
 
 /** One primary listing per restaurant: prose first, then highest rating. */
-const PRIMARY_LISTING = `
-  SELECT sl.* FROM source_listings sl
-  WHERE sl.source_slug = '${SOURCE}'
-    AND sl.id = (
-      SELECT sl2.id FROM source_listings sl2
-      LEFT JOIN reviews rv ON rv.source_listing_id = sl2.id
-      WHERE sl2.restaurant_id = sl.restaurant_id AND sl2.source_slug = '${SOURCE}'
-      ORDER BY (rv.id IS NOT NULL) DESC, sl2.rating DESC
-      LIMIT 1
-    )`;
+const PRIMARY_LISTINGS_CTE = `primary_listings AS (
+  SELECT * FROM (
+    SELECT sl.*,
+      ROW_NUMBER() OVER (
+        PARTITION BY sl.restaurant_id
+        ORDER BY (rv.id IS NOT NULL) DESC, sl.rating DESC
+      ) AS rn
+    FROM source_listings sl
+    LEFT JOIN reviews rv ON rv.source_listing_id = sl.id
+    WHERE sl.source_slug = '${SOURCE}'
+  )
+  WHERE rn = 1
+)`;
 
 export interface Filters {
   city: string;
@@ -112,6 +115,7 @@ function buildWhere(f: Filters, params: unknown[]): string {
 }
 
 const CARD_SELECT = `
+  WITH ${PRIMARY_LISTINGS_CTE}
   SELECT r.id, r.name,
     pl.rating, pl.price_tier, pl.price_label, pl.locality,
     pl.address_line1, pl.latitude, pl.longitude, pl.is_closed, pl.booking_policy,
@@ -123,7 +127,7 @@ const CARD_SELECT = `
       WHERE ge.source_listing_id = pl.id) AS guide_count,
     rv.headline AS review_headline
   FROM restaurants r
-  JOIN (${PRIMARY_LISTING}) pl ON pl.restaurant_id = r.id
+  JOIN primary_listings pl ON pl.restaurant_id = r.id
   LEFT JOIN reviews rv ON rv.source_listing_id = pl.id`;
 
 function toCard(row: CardRow, distanceKm?: number): Record<string, unknown> {
@@ -211,7 +215,8 @@ export function getRestaurant(
   if (!r) return null;
   const row = db
     .prepare(
-      `SELECT r.name,
+      `WITH ${PRIMARY_LISTINGS_CTE}
+      SELECT r.name,
         pl.rating, pl.price_tier, pl.price_label, pl.address_line1, pl.locality,
         pl.region, pl.postal_code, pl.latitude, pl.longitude, pl.phone, pl.website,
         pl.reservation_url, pl.reservation_platform, pl.booking_policy, pl.wait_notes,
@@ -220,7 +225,7 @@ export function getRestaurant(
         rv.body_text AS review_body, rv.author AS review_author,
         rv.published_at AS review_published_at, rv.url AS review_url
       FROM restaurants r
-      JOIN (${PRIMARY_LISTING}) pl ON pl.restaurant_id = r.id
+      JOIN primary_listings pl ON pl.restaurant_id = r.id
       LEFT JOIN reviews rv ON rv.source_listing_id = pl.id
       WHERE r.id = ?`
     )
@@ -230,18 +235,20 @@ export function getRestaurant(
     .prepare(
       `SELECT t.kind, t.label FROM listing_tags lt
        JOIN tags t ON t.id = lt.tag_id
-       JOIN (${PRIMARY_LISTING}) pl ON pl.id = lt.source_listing_id
-       WHERE pl.restaurant_id = ? ORDER BY t.kind, t.label`
+       JOIN source_listings sl ON sl.id = lt.source_listing_id
+       WHERE sl.restaurant_id = ? AND sl.source_slug = '${SOURCE}'
+       ORDER BY t.kind, t.label`
     )
     .all(r.id) as { kind: string; label: string }[];
   const grouped: Record<string, string[]> = {};
   for (const t of tags) (grouped[t.kind] ??= []).push(t.label);
   const guides = db
     .prepare(
-      `SELECT g.title, g.url, ge.position, ge.blurb FROM guide_entries ge
+      `SELECT g.title, g.url, ge.position, ge.entry_name, ge.blurb FROM guide_entries ge
        JOIN guides g ON g.id = ge.guide_id
-       JOIN (${PRIMARY_LISTING}) pl ON pl.id = ge.source_listing_id
-       WHERE pl.restaurant_id = ? ORDER BY g.title, ge.position`
+       JOIN source_listings sl ON sl.id = ge.source_listing_id
+       WHERE sl.restaurant_id = ? AND sl.source_slug = '${SOURCE}'
+       ORDER BY g.title, ge.position`
     )
     .all(r.id) as Record<string, unknown>[];
   const review: Record<string, unknown> = {
@@ -356,13 +363,14 @@ export function findSimilar(
   if (!r) return null;
   const mine = db
     .prepare(
-      `SELECT id FROM (${PRIMARY_LISTING}) WHERE restaurant_id = ?`
+      `WITH ${PRIMARY_LISTINGS_CTE}
+       SELECT id FROM primary_listings WHERE restaurant_id = ?`
     )
     .get(r.id) as { id: string } | undefined;
   if (!mine) return [];
   const rows = db
     .prepare(
-      `WITH my_tags AS (
+      `WITH ${PRIMARY_LISTINGS_CTE}, my_tags AS (
          SELECT lt.tag_id, t.kind FROM listing_tags lt
          JOIN tags t ON t.id = lt.tag_id
          WHERE lt.source_listing_id = ?
@@ -379,7 +387,7 @@ export function findSimilar(
            WHERE ge.source_listing_id = pl.id
              AND ge.guide_id IN (SELECT guide_id FROM my_guides)) AS guide_overlap
        FROM restaurants r
-       JOIN (${PRIMARY_LISTING}) pl ON pl.restaurant_id = r.id
+       JOIN primary_listings pl ON pl.restaurant_id = r.id
        LEFT JOIN listing_tags lt ON lt.source_listing_id = pl.id
        LEFT JOIN my_tags mt ON mt.tag_id = lt.tag_id
        WHERE r.city_slug = ? AND r.id != ?
@@ -414,22 +422,62 @@ export function guideConsensus(
     const p = `%${likeEscape(theme)}%`;
     params.push(p, p);
   }
-  return db
+  // Two-phase: (1) cheap guide-count ranking over all restaurants — no
+  // per-restaurant subqueries; (2) details only for the top rows including
+  // guide_count ties, so the scalar probes run on a handful of rows.
+  const ranked = db
     .prepare(
-      `SELECT r.id, r.name, pl.rating, pl.price_tier,
-        (SELECT GROUP_CONCAT(t.label, '|') FROM listing_tags lt JOIN tags t ON t.id = lt.tag_id
-          WHERE lt.source_listing_id = pl.id AND t.kind = 'neighborhood') AS neighborhoods,
-        COUNT(DISTINCT ge.guide_id) AS guide_count
+      `SELECT sl.restaurant_id AS rid, COUNT(DISTINCT ge.guide_id) AS guide_count
        FROM guide_entries ge
        JOIN guides g ON g.id = ge.guide_id
-       JOIN (${PRIMARY_LISTING}) pl ON pl.id = ge.source_listing_id
-       JOIN restaurants r ON r.id = pl.restaurant_id
-       WHERE r.city_slug = ? AND (pl.is_closed IS NULL OR pl.is_closed = 0) ${themeCond}
-       GROUP BY r.id
-       ORDER BY guide_count DESC, pl.rating DESC
-       LIMIT ?`
+       JOIN source_listings sl ON sl.id = ge.source_listing_id AND sl.source_slug = '${SOURCE}'
+       JOIN restaurants r ON r.id = sl.restaurant_id
+       WHERE r.city_slug = ? ${themeCond}
+       GROUP BY sl.restaurant_id
+       ORDER BY guide_count DESC`
     )
-    .all(...params, limit) as Record<string, unknown>[];
+    .all(...params) as { rid: number; guide_count: number }[];
+  if (ranked.length === 0) return [];
+  // Tie-inclusive cutoff: every row at least as popular as the limit-th row.
+  const cutoff = ranked[Math.min(limit, ranked.length) - 1].guide_count;
+  const contenders = ranked.filter((row) => row.guide_count >= cutoff);
+  const countById = new Map(contenders.map((row) => [row.rid, row.guide_count]));
+  // Primary-listing preference (prose first, then highest rating) as scalar
+  // subqueries: indexed probes, evaluated once per contender.
+  const primaryCol = (col: string) => `(SELECT sl2.${col} FROM source_listings sl2
+    LEFT JOIN reviews rv2 ON rv2.source_listing_id = sl2.id
+    WHERE sl2.restaurant_id = r.id AND sl2.source_slug = '${SOURCE}'
+    ORDER BY (rv2.id IS NOT NULL) DESC, sl2.rating DESC LIMIT 1)`;
+  const placeholders = contenders.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      `SELECT r.id, r.name,
+         ${primaryCol("rating")} AS rating,
+         ${primaryCol("price_tier")} AS price_tier,
+         (SELECT GROUP_CONCAT(t.label, '|') FROM listing_tags lt
+          JOIN tags t ON t.id = lt.tag_id
+          JOIN source_listings slx ON slx.id = lt.source_listing_id
+          WHERE slx.restaurant_id = r.id AND slx.source_slug = '${SOURCE}'
+            AND t.kind = 'neighborhood') AS neighborhoods,
+         EXISTS (SELECT 1 FROM source_listings slc
+           WHERE slc.restaurant_id = r.id AND slc.source_slug = '${SOURCE}' AND slc.is_closed = 1) AS is_closed
+       FROM restaurants r
+       WHERE r.id IN (${placeholders})`
+    )
+    .all(...contenders.map((row) => row.rid)) as Record<string, unknown>[];
+  type ConsensusRow = Record<string, unknown> & {
+    id: number;
+    rating: number | null;
+    guide_count: number | undefined;
+  };
+  return (rows as ConsensusRow[])
+    .filter((row) => !row.is_closed)
+    .map((row) => ({ ...row, guide_count: countById.get(row.id) }))
+    .sort(
+      (a, b) =>
+        (b.guide_count ?? 0) - (a.guide_count ?? 0) || (b.rating ?? 0) - (a.rating ?? 0)
+    )
+    .slice(0, limit);
 }
 
 export function topRated(

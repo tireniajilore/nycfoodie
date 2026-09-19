@@ -7,7 +7,9 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { openReadDb } from "nycfoodie-db";
+import { dirname, join } from "node:path";
+import { getDb, openDb, openReadDb } from "nycfoodie-db";
+import { migrate } from "nycfoodie-db/dist/migrate.js";
 import { z } from "zod";
 import {
   compareRestaurants,
@@ -19,10 +21,28 @@ import {
   topRated,
   type Filters,
 } from "./queries.js";
+import { createCallLogger, saveFeedback, type CallLogger } from "./telemetry.js";
 
 const dbPath =
-  process.env.NYCFOODIE_DB ?? new URL("../../../nycfoodie.db", import.meta.url).pathname;
+  process.env.NYCFOODIE_DB ?? new URL("../../nycfoodie.db", import.meta.url).pathname;
+const logPath =
+  process.env.NYCFOODIE_LOG ?? join(dirname(dbPath), "nycfoodie-mcp-calls.jsonl");
+
+// The server migrates on startup (feedback table lives here), queries
+// read-only, and feedback writes go through a separate writable handle.
+migrate(dbPath);
+openDb(dbPath);
+const writeDb = getDb();
 const db = openReadDb(dbPath);
+
+const log: CallLogger = createCallLogger(logPath);
+log({
+  ts: new Date().toISOString(),
+  tool: "<server_start>",
+  args: { dbPath },
+  duration_ms: 0,
+  ok: true,
+});
 
 const server = new McpServer({ name: "nycfoodie", version: "0.1.0" });
 
@@ -30,7 +50,41 @@ function json(data: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
 }
 
-const cityParam = z.string().describe("City slug, e.g. 'new-york'. City is always a parameter.");
+/** Wrap a tool handler with call logging (timing, args, errors). */
+function logged<TArgs extends Record<string, unknown>, TResult>(
+  name: string,
+  fn: (args: TArgs) => Promise<TResult>
+): (args: TArgs) => Promise<TResult> {
+  return async (args: TArgs) => {
+    const start = Date.now();
+    try {
+      const result = await fn(args);
+      log({
+        ts: new Date().toISOString(),
+        tool: name,
+        args,
+        duration_ms: Date.now() - start,
+        ok: true,
+        result_bytes: JSON.stringify(result).length,
+      });
+      return result;
+    } catch (e) {
+      log({
+        ts: new Date().toISOString(),
+        tool: name,
+        args,
+        duration_ms: Date.now() - start,
+        ok: false,
+        error: String(e).slice(0, 500),
+      });
+      throw e;
+    }
+  };
+}
+
+const cityParam = z.string().describe("City slug, always required. Currently 'new-york'.");
+
+const READ_ONLY = { readOnlyHint: true } as const;
 const limitParam = z
   .number()
   .int()
@@ -86,7 +140,8 @@ server.registerTool(
   "search_restaurants",
   {
     description:
-      "Search restaurants by free text, cuisine, neighbourhood, occasion or price, optionally near a point. Known-closed venues are excluded by default.",
+      "Search restaurants by free text, cuisine, neighbourhood, occasion or price, optionally near a point. Use when the user describes what they want (e.g. 'Italian date night in the West Village', 'ramen near me') rather than naming a specific restaurant. Returns compact matches with Infatuation rating (0–10), price tier, address and tags. Known-closed venues are excluded by default.",
+    annotations: READ_ONLY,
     inputSchema: {
       query: z.string().optional().describe("Free text, e.g. 'date-night Italian'"),
       city: cityParam,
@@ -98,7 +153,7 @@ server.registerTool(
       limit: limitParam,
     },
   },
-  async (args) =>
+  logged("search_restaurants", async (args) =>
     json(
       searchRestaurants(
         db,
@@ -107,13 +162,15 @@ server.registerTool(
         args.sort === "guides" ? "guides" : "rating"
       )
     )
+  )
 );
 
 server.registerTool(
   "get_restaurant",
   {
     description:
-      "The full picture for one restaurant in one call: rating, price, address, reservation link, booking intel, review summary, tags and every guide it appears in.",
+      "Get the full picture for one restaurant in one call: Infatuation rating (0–10), price tier, address, reservation link, booking intel, review summary, tags and every guide it appears in. Use when the user names a specific restaurant. Full review prose is opt-in via include_prose (default: headline and summary only).",
+    annotations: READ_ONLY,
     inputSchema: {
       id: z.string().describe("Canonical restaurant id, or a name to resolve"),
       city: cityParam,
@@ -123,16 +180,18 @@ server.registerTool(
         .describe("Include the full review text (default false: headline + summary only)"),
     },
   },
-  async ({ id, city, include_prose }) => {
+  logged("get_restaurant", async ({ id, city, include_prose }) => {
     const r = getRestaurant(db, city, id, include_prose ?? false);
     return r ? json(r) : json({ found: false, query: id });
-  }
+  })
 );
 
 server.registerTool(
   "compare_restaurants",
   {
-    description: "Head-to-head comparison of 2–3 restaurants as structured data.",
+    description:
+      "Compare 2–3 named restaurants head-to-head as structured data (rating, price, tags, review summary). Use when the user asks to choose between specific places, e.g. 'should I go to X or Y?'.",
+    annotations: READ_ONLY,
     inputSchema: {
       restaurants: z
         .array(z.string())
@@ -142,61 +201,97 @@ server.registerTool(
       city: cityParam,
     },
   },
-  async ({ restaurants, city }) => json(compareRestaurants(db, city, restaurants))
+  logged("compare_restaurants", async ({ restaurants, city }) => json(compareRestaurants(db, city, restaurants)))
 );
 
 server.registerTool(
   "find_guides",
   {
     description:
-      "Find curated editorial guides (ranked lists) matching a theme. Returns each guide with its ranked entries, blurbs and linked restaurants.",
+      "Find curated editorial guides (ranked lists) matching a theme, e.g. 'best ramen'. Returns each guide with its ranked entries, blurbs and linked restaurants. Use when the user wants the editorial lists themselves rather than individual restaurant picks.",
+    annotations: READ_ONLY,
     inputSchema: {
       city: cityParam,
       query: z.string().optional().describe("Theme, e.g. 'best ramen', 'date night'"),
       limit: limitParam,
     },
   },
-  async ({ city, query, limit }) => json(findGuides(db, city, query, limit ?? 5))
+  logged("find_guides", async ({ city, query, limit }) => json(findGuides(db, city, query, limit ?? 5)))
 );
 
 server.registerTool(
   "find_similar",
   {
     description:
-      "Restaurants similar to one you name, scored by shared cuisine, occasion and neighbourhood tags plus guide co-occurrence.",
+      "Find restaurants similar to a named one, scored by shared cuisine, occasion and neighbourhood tags plus guide co-occurrence. Use for 'like X' or 'alternatives to X' requests.",
+    annotations: READ_ONLY,
     inputSchema: {
       id: z.string().describe("Canonical restaurant id, or a name to resolve"),
       city: cityParam,
       limit: limitParam,
     },
   },
-  async ({ id, city, limit }) => {
+  logged("find_similar", async ({ id, city, limit }) => {
     const r = findSimilar(db, city, id, limit ?? 10);
     return r ? json(r) : json({ found: false, query: id });
-  }
+  })
 );
 
 server.registerTool(
   "guide_consensus",
   {
     description:
-      "Restaurants the guides agree on: ranked by how many distinct guides feature them, optionally filtered by theme.",
+      "Rank restaurants by how many distinct guides feature them, optionally filtered by theme. Use for 'where can't I go wrong' or safest-bet picks. Differs from find_guides: this returns ranked restaurants, not the guides themselves.",
+    annotations: READ_ONLY,
     inputSchema: {
       city: cityParam,
       theme: z.string().optional().describe("Guide theme, e.g. 'ramen', 'brunch'"),
       limit: limitParam,
     },
   },
-  async ({ city, theme, limit }) => json(guideConsensus(db, city, theme, limit ?? 10))
+  logged("guide_consensus", async ({ city, theme, limit }) => json(guideConsensus(db, city, theme, limit ?? 10)))
 );
 
 server.registerTool(
   "top_rated",
   {
-    description: "Highest-rated restaurants, with optional cuisine, neighbourhood and price filters.",
+    description:
+      "List the highest-rated restaurants (Infatuation 0–10 scale), with optional cuisine, neighbourhood and price filters. Use for 'best in the city' requests. Differs from search_restaurants: no free-text query, strictly rating-ordered.",
+    annotations: READ_ONLY,
     inputSchema: { city: cityParam, ...filterShape, limit: limitParam },
   },
-  async (args) => json(topRated(db, filtersFrom(args), args.limit ?? 10))
+  logged("top_rated", async (args) => json(topRated(db, filtersFrom(args), args.limit ?? 10)))
+);
+
+server.registerTool(
+  "submit_feedback",
+  {
+    description:
+      "Record feedback on a tool result: a 1–5 rating, a comment, or both (at least one is required). Use after showing the user a recommendation to log what was good or wrong. Each call stores a new feedback entry; it changes nothing the user sees.",
+    annotations: { readOnlyHint: false, idempotentHint: false },
+    inputSchema: {
+      tool: z
+        .string()
+        .optional()
+        .describe("Which tool the feedback is about, e.g. 'search_restaurants'"),
+      rating: z
+        .number()
+        .int()
+        .min(1)
+        .max(5)
+        .optional()
+        .describe("1 (poor) to 5 (excellent)"),
+      comment: z.string().optional().describe("What was good or wrong"),
+    },
+  },
+  logged("submit_feedback", async ({ tool, rating, comment }) => {
+    try {
+      const id = saveFeedback(writeDb, { tool_name: tool, rating, comment });
+      return json({ received: true, id });
+    } catch (e) {
+      return json({ received: false, error: String(e).slice(0, 200) });
+    }
+  })
 );
 
 async function main(): Promise<void> {
