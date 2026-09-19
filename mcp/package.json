@@ -1,1 +1,19 @@
-{"bin":{"nycfoodie-mcp":"dist/index.js"},"dependencies":{"@modelcontextprotocol/sdk":"^1.30.0","nycfoodie-db":"*","zod":"^4.6.5"},"description":"MCP server (stdio) exposing editorial restaurant recommendations","name":"nycfoodie-mcp","scripts":{"build":"tsc -p tsconfig.json","typecheck":"tsc --noEmit -p tsconfig.json"},"type":"module","version":"0.1.0"}
+{
+  "bin": {
+    "nycfoodie-mcp": "dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "nycfoodie-db": "*",
+    "zod": "^4.6.5"
+  },
+  "description": "MCP server (stdio) exposing editorial restaurant recommendations",
+  "name": "nycfoodie-mcp",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "start:http": "node dist/http.js"
+  },
+  "type": "module",
+  "version": "0.1.0"
+}
