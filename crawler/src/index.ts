@@ -10,12 +10,16 @@ import { forEachSearchPage, POLITE_DELAY_MS } from "./infatuation/graphql.js";
 import {
   enrichReview,
   extractGuide,
+  extractReview,
   fetchGuidePageData,
+  fetchReviewPageData,
   listGuideSlugs,
 } from "./infatuation/pagedata.js";
 import { verifyPlace, sleep as googleSleep, RECHECK_DAYS } from "./google/places.js";
 import {
+  applyEnrichment,
   ensureCity,
+  enrichmentCandidates,
   getCrawlCursor,
   googleVerifyCandidates,
   initStore,
@@ -130,6 +134,9 @@ switch (cmd) {
   case "guides":
     await cmdGuides();
     break;
+  case "enrich":
+    await cmdEnrich();
+    break;
   case undefined:
   case "help":
   case "--help":
@@ -155,7 +162,13 @@ Options (google-verify):
 Options (guides):
   --limit      Max guides to fetch (default: 3)
   --write      Write to the database (default: dry run, no writes)
-  --db         SQLite path (default: ./nycfoodie.db)`);
+  --db         SQLite path (default: ./nycfoodie.db)
+
+Options (enrich):
+  --limit       Max listings to enrich (default: 50). Highest-rated first.
+  --concurrency Parallel fetch workers (default: 4)
+  --write       Write to the database (default: dry run, no writes)
+  --db          SQLite path (default: ./nycfoodie.db)`);
     break;
   default:
     console.error(`Unknown command: ${cmd}. Run \`nycfoodie-crawl help\`.`);
@@ -238,6 +251,70 @@ async function cmdGuides(): Promise<void> {
     closeDb();
   }
   console.log(`Done: ${guides} guide(s), ${entries} entries, ${linked} linked to listings.`);
+  if (!write) console.log("Dry run — nothing written to the database.");
+}
+
+/**
+ * Enrich rated listings with layer-B page data (prose, venue detail,
+ * closure flags, dishes, perfect-for tags). Parallel workers, each polite.
+ * Re-runs only pick up listings with no review prose yet.
+ */
+async function cmdEnrich(): Promise<void> {
+  const dbPath = arg("db", "./nycfoodie.db")!;
+  const city = arg("city", "new-york")!;
+  const limit = Number(arg("limit", "50")!);
+  const concurrency = Math.max(1, Number(arg("concurrency", "4")!));
+  const write = flag("write");
+
+  // Reads need the database even for a dry run; only enrichment writes are gated.
+  initStore(dbPath);
+  ensureCity(city, city === "new-york" ? "New York" : city);
+  const candidates = enrichmentCandidates(city, limit);
+  console.log(
+    `Enriching ${candidates.length} rated listing(s) for city=${city} ` +
+      `(concurrency=${concurrency}, write=${write})…`
+  );
+  if (candidates.length === 0) {
+    closeDb();
+    return;
+  }
+
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const queue = candidates.slice();
+  let done = 0;
+  let ok = 0;
+  let failed = 0;
+  let dishes = 0;
+
+  async function worker(): Promise<void> {
+    while (queue.length > 0) {
+      const c = queue.shift()!;
+      await sleep(2000); // per-worker politeness between requests
+      try {
+        const state = await fetchReviewPageData(city, c.source_key);
+        const enriched = extractReview(state);
+        if (!enriched) throw new Error("no review extracted from page data");
+        if (write) applyEnrichment(city, c.id, c.source_url, enriched);
+        dishes += enriched.dishes.length;
+        ok++;
+      } catch (e) {
+        failed++;
+        console.error(`  ! ${c.source_key}: ${String(e).slice(0, 140)}`);
+      }
+      done++;
+      if (done % 50 === 0 || done === candidates.length) {
+        console.log(`  … ${done}/${candidates.length} (ok=${ok}, failed=${failed})`);
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, queue.length) }, worker));
+
+  if (write) {
+    recordCrawlState(city, "enrichment", ok, null);
+  }
+  closeDb();
+  console.log(`Done: ${ok} enriched, ${failed} failed, ${dishes} dishes.`);
   if (!write) console.log("Dry run — nothing written to the database.");
 }
 

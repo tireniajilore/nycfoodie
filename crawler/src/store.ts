@@ -474,8 +474,116 @@ export function upsertGuideEntry(
   return { linked: !!listing };
 }
 
-/** Candidate venues for Google verification: have coordinates, not checked recently. */
-export function googleVerifyCandidates(
+/** Candidate listings for enrichment: rated, no review prose stored yet. */
+export function enrichmentCandidates(
+  citySlug: string,
+  limit: number
+): Array<{ id: string; source_key: string; source_url: string; name: string }> {
+  return getDb()
+    .prepare(
+      `SELECT sl.id, sl.source_key, sl.source_url, sl.name
+       FROM source_listings sl
+       LEFT JOIN reviews r ON r.source_listing_id = sl.id
+       WHERE sl.rating IS NOT NULL
+         AND r.id IS NULL
+         AND sl.source_url LIKE '%/' || ? || '/%'
+       ORDER BY sl.rating DESC
+       LIMIT ?`
+    )
+    .all(citySlug, limit) as Array<{
+    id: string;
+    source_key: string;
+    source_url: string;
+    name: string;
+  }>;
+}
+
+/**
+ * Apply layer-B page data to an existing listing: venue fields (never
+ * clobbering layer-A values with NULL), the review prose row, dishes and
+ * perfect-for tags. Booking intel stays as-is — it comes from layer A.
+ */
+export function applyEnrichment(
+  citySlug: string,
+  listingId: string,
+  sourceUrl: string,
+  enriched: EnrichedReview
+): void {
+  const db = getDb();
+  const ts = now();
+  const v = enriched.venue;
+  db.prepare(
+    `UPDATE source_listings SET
+       phone = COALESCE(?, phone),
+       website = COALESCE(?, website),
+       address_line1 = COALESCE(?, address_line1),
+       locality = COALESCE(?, locality),
+       region = COALESCE(?, region),
+       postal_code = COALESCE(?, postal_code),
+       latitude = COALESCE(?, latitude),
+       longitude = COALESCE(?, longitude),
+       price_tier = COALESCE(?, price_tier),
+       reservation_url = COALESCE(?, reservation_url),
+       is_closed = COALESCE(?, is_closed),
+       closed_status = COALESCE(?, closed_status),
+       last_crawled_at = ?
+     WHERE id = ?`
+  ).run(
+    v.phone ?? null,
+    v.url ?? null,
+    v.street ?? null,
+    v.city ?? null,
+    v.state ?? null,
+    v.postalCode ?? null,
+    v.lat ?? null,
+    v.lon ?? null,
+    v.price ?? null,
+    v.reservationUrl ?? null,
+    v.closed === true ? 1 : v.closed === false ? 0 : null,
+    v.closedStatus ?? null,
+    ts,
+    listingId
+  );
+
+  const reviewId = randomUUID();
+  db.prepare(
+    `INSERT INTO reviews (id, source_listing_id, title, headline, summary, body_text, rating, author, url, published_at, updated_at, last_crawled_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (source_listing_id) DO UPDATE SET
+       title = excluded.title, headline = excluded.headline, summary = excluded.summary,
+       body_text = excluded.body_text, rating = excluded.rating, author = excluded.author,
+       url = excluded.url, published_at = excluded.published_at, updated_at = excluded.updated_at,
+       last_crawled_at = excluded.last_crawled_at`
+  ).run(
+    reviewId,
+    listingId,
+    enriched.title ?? null,
+    enriched.headline ?? null,
+    enriched.preview ?? null,
+    enriched.bodyMarkdown || null,
+    enriched.rating ?? null,
+    enriched.author ?? null,
+    sourceUrl,
+    enriched.publishedAt ?? null,
+    null,
+    ts
+  );
+  const rev = db
+    .prepare(`SELECT id FROM reviews WHERE source_listing_id = ?`)
+    .get(listingId) as { id: string };
+  db.prepare(`DELETE FROM dishes WHERE review_id = ?`).run(rev.id);
+  enriched.dishes.forEach((d, i) => {
+    db.prepare(
+      `INSERT INTO dishes (id, review_id, position, name, description) VALUES (?, ?, ?, ?, ?)`
+    ).run(randomUUID(), rev.id, i + 1, d.name, d.description ?? null);
+  });
+
+  for (const label of enriched.perfectFor ?? []) {
+    tagListing(listingId, upsertTag(citySlug, "occasion", slugify(label), label));
+  }
+}
+
+/** Candidate venues for Google verification: have coordinates, not checked recently. */export function googleVerifyCandidates(
   citySlug: string,
   limit: number,
   recheckDays: number
