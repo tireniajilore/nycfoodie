@@ -447,7 +447,7 @@ export function upsertGuide(
  */
 export function upsertGuideEntry(
   guideId: string,
-  entry: { position: number; sourceKey: string; blurb: string | null }
+  entry: { position: number; sourceKey: string; name: string | null; blurb: string | null }
 ): { linked: boolean } {
   const db = getDb();
   const listing = db
@@ -466,11 +466,13 @@ export function upsertGuideEntry(
        AND source_listing_id = ? AND position != ?`
   ).run(guideId, listing?.id ?? null, entry.position);
   db.prepare(
-    `INSERT INTO guide_entries (id, guide_id, source_listing_id, position, blurb)
-     VALUES (?, ?, ?, ?, ?)
+    `INSERT INTO guide_entries (id, guide_id, source_listing_id, position, entry_name, blurb)
+     VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT (guide_id, position) DO UPDATE SET
-       source_listing_id = excluded.source_listing_id, blurb = excluded.blurb`
-  ).run(id, guideId, listing?.id ?? null, entry.position, entry.blurb);
+       source_listing_id = excluded.source_listing_id,
+       entry_name = excluded.entry_name,
+       blurb = excluded.blurb`
+  ).run(id, guideId, listing?.id ?? null, entry.position, entry.name, entry.blurb);
   return { linked: !!listing };
 }
 

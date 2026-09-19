@@ -1,7 +1,7 @@
-# NYCfoodie — Database Schema Proposal (step 3)
+# NYCfoodie — Database Schema (step 3)
 
-Status: **proposed, awaiting Tireni's approval.** Nothing is implemented yet —
-on approval this becomes `db/migrations/001_initial_schema.sql`.
+Status: **approved by Tireni on 2026-09-19 and implemented** as
+`db/migrations/001_initial_schema.sql` (plus 002–005).
 
 Follows the repo's Postgres-compatibility rules (`db/migrations/README.md`):
 only `TEXT`/`INTEGER`/`REAL`, ISO-8601 `TEXT` timestamps, booleans as `0`/`1`,

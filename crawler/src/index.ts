@@ -232,6 +232,7 @@ async function cmdGuides(): Promise<void> {
           const r = upsertGuideEntry(guideId, {
             position: e.rank,
             sourceKey: e.sourceKey,
+            name: e.headline,
             blurb: [e.headline, e.blurb].filter(Boolean).join("\n\n"),
           });
           entries++;

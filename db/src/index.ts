@@ -27,3 +27,13 @@ export function closeDb(): void {
   db?.close();
   db = null;
 }
+
+/**
+ * Open a database read-only. No singleton, no migrations, no WAL changes —
+ * for query-only consumers such as the MCP server.
+ */
+export function openReadDb(path: string): Db {
+  const ro = new Database(path, { readonly: true });
+  ro.pragma("foreign_keys = ON");
+  return ro;
+}
