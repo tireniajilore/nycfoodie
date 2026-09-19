@@ -8,7 +8,7 @@
 
 import { forEachSearchPage } from "./infatuation/graphql.js";
 import { enrichReview } from "./infatuation/pagedata.js";
-import { ensureCity, initStore, recordCrawlState, upsertReviewListing } from "./store.js";
+import { ensureCity, getCrawlCursor, initStore, recordCrawlState, upsertReviewListing } from "./store.js";
 import { closeDb } from "nycfoodie-db";
 import type { RawPostReview } from "./infatuation/types.js";
 
@@ -33,6 +33,14 @@ async function cmdReviews(): Promise<void> {
     initStore(dbPath);
     ensureCity(city, city === "new-york" ? "New York" : city);
   }
+  const resumeCursor = write ? getCrawlCursor(city, "reviews") : null;
+  // A finished sweep is recorded with the "DONE" sentinel so reruns are a no-op.
+  if (resumeCursor === "DONE") {
+    console.log("Review sweep already complete — nothing to do.");
+    if (write) closeDb();
+    return;
+  }
+  if (resumeCursor) console.log("Resuming review sweep from saved cursor…");
 
   console.log(
     `Fetching Infatuation reviews for city=${city} (maxPages=${maxPages}, write=${write}, enrich=${enrich})…`
@@ -41,7 +49,7 @@ async function cmdReviews(): Promise<void> {
   let sample = 0;
   let written = 0;
   let lastCursor: string | null = null;
-  const { pages, nodes } = await forEachSearchPage(
+  const { pages, nodes, completed } = await forEachSearchPage(
     {
       attributePathText: `/${city}`,
       postCategoryTypeText: ["POST_REVIEW"],
@@ -82,11 +90,11 @@ async function cmdReviews(): Promise<void> {
       }
       return true;
     },
-    { maxPages }
+    { maxPages, initialCursor: resumeCursor ?? undefined }
   );
 
   if (write) {
-    recordCrawlState(city, "reviews", nodes, lastCursor);
+    recordCrawlState(city, "reviews", nodes, completed ? "DONE" : lastCursor);
     closeDb();
   }
   console.log(`Done: ${pages} page(s), ${nodes} review node(s), ${written} written.`);

@@ -171,20 +171,25 @@ export function sleep(ms: number): Promise<void> {
 export async function forEachSearchPage(
   input: PostSearchInput,
   onPage: (page: SearchPostsPage, pageIndex: number) => boolean | Promise<boolean>,
-  opts: { maxPages?: number; delayMs?: number } = {}
-): Promise<{ pages: number; nodes: number }> {
-  const { maxPages = 50, delayMs = POLITE_DELAY_MS } = opts;
-  let cursor: string | undefined;
+  opts: { maxPages?: number; delayMs?: number; initialCursor?: string } = {}
+): Promise<{ pages: number; nodes: number; completed: boolean }> {
+  const { maxPages = 50, delayMs = POLITE_DELAY_MS, initialCursor } = opts;
+  let cursor: string | undefined = initialCursor;
   let pages = 0;
   let nodes = 0;
+  let completed = false;
   for (let i = 0; i < maxPages; i++) {
     const page = await searchPostsPage({ ...input, paginationContextualText: cursor });
     pages++;
     nodes += page.nodes.length;
     const cont = await onPage(page, i);
-    if (!cont || !page.endCursor) break;
+    if (!cont) break;
+    if (!page.endCursor) {
+      completed = true;
+      break;
+    }
     cursor = page.endCursor;
     await sleep(delayMs);
   }
-  return { pages, nodes };
+  return { pages, nodes, completed };
 }

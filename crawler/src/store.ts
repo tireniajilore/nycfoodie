@@ -343,6 +343,16 @@ function checksumListing(raw: RawPostReview): string {
   return (h >>> 0).toString(16);
 }
 
+/** Read the saved pagination cursor for (source, city, collection), if any. */
+export function getCrawlCursor(citySlug: string, collection: string): string | null {
+  const row = getDb()
+    .prepare(
+      `SELECT last_cursor FROM crawl_state WHERE source_slug = ? AND city_slug = ? AND collection = ?`
+    )
+    .get(SOURCE_SLUG, citySlug, collection) as { last_cursor: string | null } | undefined;
+  return row?.last_cursor ?? null;
+}
+
 /** Record a crawl watermark for (source, city, collection). */
 export function recordCrawlState(
   citySlug: string,
