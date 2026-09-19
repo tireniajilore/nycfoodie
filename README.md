@@ -1,4 +1,4 @@
-# taste (working title)
+# NYCfoodie
 
 The data layer for restaurant taste: structured, editorial restaurant recommendations served to AI agents over MCP. Not another review scraper — curated guides and reviews normalised into one schema, queryable by tools.
 
@@ -16,13 +16,13 @@ MVP city: New York. The city is a parameter everywhere; nothing NYC-specific is 
 npm install
 npm run typecheck
 npm run build
-node db/dist/migrate.js ./taste.db   # creates/opens the SQLite db, applies migrations
-node mcp/dist/index.js               # starts the MCP server on stdio
+node db/dist/migrate.js ./nycfoodie.db   # creates/opens the SQLite db, applies migrations
+node mcp/dist/index.js                   # starts the MCP server on stdio
 ```
 
 ## Roadmap
 
-1. Scaffold (this) — repo, packages, migration runner, stub MCP tools.
+1. Scaffold (done) — repo, packages, migration runner, stub MCP tools.
 2. Map The Infatuation's data surface — Next.js pages + GraphQL endpoints → `docs/infatuation-data-surface.md`.
 3. Database schema proposal — shown for approval before any crawler code is written.
 4. Crawler — only after schema sign-off.

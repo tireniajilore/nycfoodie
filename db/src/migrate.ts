@@ -1,7 +1,7 @@
 // Numbered-migration runner. Applies db/migrations/*.sql in filename order,
 // once each, tracked in schema_migrations. Each migration runs in a transaction.
 //
-// CLI: node dist/migrate.js [db-path]   (defaults to ./taste.db)
+// CLI: node dist/migrate.js [db-path]   (defaults to ./nycfoodie.db)
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
@@ -45,7 +45,7 @@ const isMain =
   process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
 
 if (isMain) {
-  const dbPath = process.argv[2] ?? join(process.cwd(), "taste.db");
+  const dbPath = process.argv[2] ?? join(process.cwd(), "nycfoodie.db");
   const applied = migrate(dbPath);
   console.log(applied.length === 0 ? "Database is up to date." : `Applied: ${applied.join(", ")}`);
   closeDb();

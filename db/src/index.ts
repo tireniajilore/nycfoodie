@@ -1,4 +1,4 @@
-// taste-db: SQLite access layer (better-sqlite3).
+// nycfoodie-db: SQLite access layer (better-sqlite3).
 //
 // Migration SQL is kept Postgres-compatible by convention (see
 // db/migrations/README.md), so the storage backend can move to Postgres

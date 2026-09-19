@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// taste MCP server (stdio).
+// nycfoodie MCP server (stdio).
 //
 // Tools are stubbed until the database exists: the schema proposal (step 3)
 // and the crawler (step 4) come first. Tool shapes already reflect the
@@ -10,7 +10,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-const server = new McpServer({ name: "taste", version: "0.1.0" });
+const server = new McpServer({ name: "nycfoodie", version: "0.1.0" });
 
 const NOT_READY = "Not implemented yet — the database is empty until the crawler lands (step 4).";
 

@@ -5,7 +5,7 @@
 // schema sign-off.
 
 export const INFATUATION_BASE_URL = "https://www.theinfatuation.com";
-export const USER_AGENT = "taste-crawler/0.1 (research project; polite rate limits)";
+export const USER_AGENT = "nycfoodie-crawler/0.1 (research project; polite rate limits)";
 
 export class InfatuationClient {
   constructor(
