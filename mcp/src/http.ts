@@ -181,6 +181,13 @@ const ROBOTS_TXT = `User-agent: *
 Allow: /
 `;
 
+// Glama connector ownership claim (HTTP challenge). Glama requires this file
+// to stay in place so it can keep verifying ownership of the listing.
+const GLAMA_JSON = JSON.stringify({
+  $schema: "https://glama.ai/mcp/schemas/connector.json",
+  claim: "glama_claim_4pzowXEakxm1R2Vveqtx2Fmfhcow5q6e",
+});
+
 function handleLanding(res: ServerResponse): void {
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(LANDING_HTML);
@@ -252,6 +259,11 @@ const httpServer = createServer((req, res) => {
   if (url.pathname === "/robots.txt" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
     res.end(ROBOTS_TXT);
+    return;
+  }
+  if (url.pathname === "/.well-known/glama.json" && req.method === "GET") {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(GLAMA_JSON);
     return;
   }
   if (url.pathname === "/admin/feedback" && req.method === "GET") {
