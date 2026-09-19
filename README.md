@@ -4,6 +4,18 @@ The data layer for restaurant taste: structured, editorial restaurant recommenda
 
 MVP city: New York. The city is a parameter everywhere; nothing NYC-specific is hardcoded.
 
+## Use it
+
+Hosted endpoint (Streamable HTTP): `https://nycfoodie-production.up.railway.app/mcp`
+
+- **Cursor** — [one-click install](cursor://anysphere.cursor-deeplink/mcp/install?name=nycfoodie&config=eyJ1cmwiOiAiaHR0cHM6Ly9ueWNmb29kaWUtcHJvZHVjdGlvbi51cC5yYWlsd2F5LmFwcC9tY3AifQ==)
+- **Claude Code / any MCP client** — add the URL above as a remote MCP server (Streamable HTTP). No auth, no install.
+- **Claude (app)** — Settings → Connectors → Add custom connector → paste the URL.
+
+### Tools
+
+`search_restaurants` · `get_restaurant` · `compare_restaurants` · `find_guides` · `find_similar` · `guide_consensus` · `top_rated` · `submit_feedback`
+
 ## Layout
 
 - `db/` — SQLite storage (better-sqlite3) with numbered SQL migrations written in Postgres-compatible DDL. The migration runner is dialect-agnostic by convention, so a Postgres adapter can replace better-sqlite3 later without touching the migrations.

@@ -35,8 +35,11 @@ COPY --from=build /app/mcp/dist ./mcp/dist
 COPY nycfoodie.db ./nycfoodie.db
 RUN useradd --create-home --shell /usr/sbin/nologin app \
   && mkdir -p /app/data && chown -R app:app /app
-USER app
+# entrypoint (runs as root): chowns the Railway volume mount at /app/data,
+# then drops to the app user before starting the server
+COPY entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 EXPOSE 3000
 ENV PORT=3000
 HEALTHCHECK --interval=30s --timeout=5s CMD node -e "fetch('http://localhost:'+(process.env.PORT||3000)+'/healthz').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
-CMD ["node", "mcp/dist/http.js"]
+ENTRYPOINT ["/app/entrypoint.sh"]
