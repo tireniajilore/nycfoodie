@@ -7,6 +7,7 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { dirname, join } from "node:path";
+import { copyFileSync, existsSync } from "node:fs";
 import { getDb, openDb, openReadDb } from "nycfoodie-db";
 import { migrate } from "nycfoodie-db/dist/migrate.js";
 import { z } from "zod";
@@ -24,6 +25,14 @@ import { createCallLogger, saveFeedback, type CallLogger } from "./telemetry.js"
 
 const dbPath =
   process.env.NYCFOODIE_DB ?? new URL("../../nycfoodie.db", import.meta.url).pathname;
+const seedPath = new URL("../../nycfoodie.db", import.meta.url).pathname;
+
+// First boot on a fresh volume: seed the database from the copy baked into
+// the image, so feedback and call logs written afterwards persist on the volume.
+if (!existsSync(dbPath) && seedPath !== dbPath && existsSync(seedPath)) {
+  copyFileSync(seedPath, dbPath);
+  console.log(JSON.stringify({ event: "db_seed", from: seedPath, to: dbPath }));
+}
 const logPath =
   process.env.NYCFOODIE_LOG ?? join(dirname(dbPath), "nycfoodie-mcp-calls.jsonl");
 

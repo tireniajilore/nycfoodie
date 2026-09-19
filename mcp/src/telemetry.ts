@@ -49,9 +49,16 @@ export function saveFeedback(db: Database, input: FeedbackInput): string {
     throw new Error("rating must be an integer from 1 to 5.");
   }
   const id = randomUUID();
+  const ts = new Date().toISOString();
+  const toolName = input.tool_name?.trim() || null;
   db.prepare(
     `INSERT INTO feedback (id, created_at, tool_name, rating, comment)
      VALUES (?, ?, ?, ?, ?)`
-  ).run(id, new Date().toISOString(), input.tool_name?.trim() || null, rating, comment);
+  ).run(id, ts, toolName, rating, comment);
+  // Structured trail on stderr (stdout is the JSON-RPC channel in stdio mode;
+  // Railway captures stderr in deploy logs). Second sink independent of the DB.
+  process.stderr.write(
+    JSON.stringify({ event: "feedback", id, ts, tool_name: toolName, rating, comment }) + "\n"
+  );
   return id;
 }
