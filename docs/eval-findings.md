@@ -111,3 +111,44 @@ wrong; entry 3 + the hyphen and min_rating findings from entry 2 are accurate.
    (top-3 names) on `get_restaurant`, `find_similar`, `compare_restaurants`.
 10. **Empty query documented.** `search_restaurants` description now states
     that no query/filters returns the highest-rated venues.
+
+## Round 2 — regression (2026-09-19, feedback 7e2a4723, get_restaurant, 4/5)
+Confirmed FIXED (10 of 12): hyphen tokenization, min_rating=0 null retention,
+unsupported-city error, guide_consensus theme padding, borough hierarchy,
+'Bed-Stuy' alias, LaRina stale reservation date, empty occasion tags,
+guide_consensus neighborhoods array, closed in list results.
+STILL OPEN: (a) occasion='group dinner' returns [] — no such tag in data;
+vocabulary is documented in the tool description, 'group dinner' appears only
+as conversational copy on the landing page (http.ts:176), not as a schema
+example. (b) LaRina review.headline null while summary populated (source data).
+NEW: (1) multi-neighborhood venues only findable under the primary listing's
+neighborhood — L'industrie (f0c3b727) tagged ['Little Italy','Williamsburg']
+across listings, but the neighborhood filter checks the primary listing only;
+(2) collapsed neighborhood unstable across tools (toCard takes primary
+listing's first GROUP_CONCAT value; compare takes all-listings tags[0]);
+(3) duplicate cuisines ['Pizza','Pizza'] — getRestaurant aggregates tags
+across listings with no dedup; (4) chain entity resolution — L'industrie has
+2 DB records for 3 editorial locations, curly vs straight apostrophes,
+price_tier 2 vs 1; (5) booking has three shapes — string (cards), object
+(get_restaurant), string-or-null (compare); (6) reservation null (get) vs
+false (compare) for the same venue. METHOD NOTE: guide_appearances 7 vs 8
+across calls treated as deploy noise.
+
+## Round 3 — geo / vocabulary / thin data (2026-09-19, feedback 847bea14, find_similar, 3/5)
+(1) CONFIRMED: lat+lng without radius_km silently ignored — buildWhere only
+applies the geo bounding box when lat+lng+radiusKm are ALL present; live
+check returned city-wide top picks with no distance_km. Same for
+lat+radius without lng. (2) CONFIRMED: query matches names and tag labels
+only — review prose and guide blurbs unsearchable ('cacio e pepe' -> []).
+(3) CONFIRMED live: La Bastide (8.8, Westchester, guide_appearances=0) ranks
+6th in top_rated cuisine='French' under city='new-york'. (4) CONFIRMED BUG in
+findSimilar scorer: `SUM(CASE mt.kind WHEN 'cuisine' THEN 3 ... ELSE 1 END)`
+— unmatched candidate tags have mt.kind NULL, which falls through to ELSE 1,
+so EVERY candidate tag scores >= 1 and tag_score measures candidate tag
+breadth, not intersection. NY Dosas (6 cuisine tags) scored 8 vs Cenadou's 7
+with zero shared tags. HAVING tag_score > 0 is therefore vacuous. (5) One
+transient 5xx on top_rated, not reproducible — flagged flaky.
+ROOT-CAUSE THESIS from evaluator: the server fills the requested limit
+whether or not it has signal (borough omission, city-slug silence, geo drop,
+consensus padding, find_similar noise); suggests a shared policy — fewer
+results or a confidence field — rather than per-tool fixes.

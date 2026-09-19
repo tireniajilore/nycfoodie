@@ -125,6 +125,12 @@ function tagFromPath(
   tagListing(listingId, upsertTag(citySlug, kind, slug, cleanLabel));
 }
 
+/** Canonical name key: fold curly quotes/apostrophes so "L’industrie" and
+ *  "L'industrie" match instead of creating duplicate restaurant rows. */
+export function canonicalName(name: string): string {
+  return name.replace(/[’‘`´]/g, "'").replace(/[“”]/g, '"').trim();
+}
+
 /** Match-or-create the canonical restaurant row. MVP rule: same city + normalised name. */
 function matchOrCreateRestaurant(
   citySlug: string,
@@ -143,9 +149,10 @@ function matchOrCreateRestaurant(
   }
 ): string {
   const db = getDb();
+  const clean = canonicalName(name);
   const existing = db
     .prepare(`SELECT id FROM restaurants WHERE city_slug = ? AND lower(name) = lower(?)`)
-    .get(citySlug, name.trim()) as { id: string } | undefined;
+    .get(citySlug, clean) as { id: string } | undefined;
   if (existing) return existing.id;
   const id = randomUUID();
   const ts = now();
@@ -157,7 +164,7 @@ function matchOrCreateRestaurant(
   ).run(
     id,
     citySlug,
-    name.trim(),
+    clean,
     addr.address_line1 ?? null,
     addr.locality ?? null,
     addr.region ?? null,

@@ -1,0 +1,468 @@
+[
+  {
+    "tool": "search_restaurants",
+    "label": "Search: date night Italian",
+    "args": {
+      "query": "date night Italian",
+      "city": "new-york",
+      "limit": 6
+    },
+    "result": [
+      {
+        "id": "49d3919c-1e50-484c-aed4-cc1ca8da78a4",
+        "name": "Via Carota",
+        "rating": 9.5,
+        "price_tier": 3,
+        "price_label": "EXPENSIVE",
+        "neighborhood": "West Village",
+        "cuisines": [
+          "Pasta",
+          "Italian"
+        ],
+        "address": "51 Grove St.",
+        "guide_appearances": 22,
+        "closed": false,
+        "booking": "reservations-available",
+        "review_headline": "There's always a wait at Via Carota, and it's always worth it"
+      },
+      {
+        "id": "bb1403b1-9268-4322-8827-92cc8e7ecaac",
+        "name": "Lilia",
+        "rating": 8.9,
+        "price_tier": 3,
+        "price_label": "EXPENSIVE",
+        "neighborhood": "Williamsburg",
+        "cuisines": [
+          "Pasta",
+          "Italian"
+        ],
+        "address": "567 Union Avenue",
+        "guide_appearances": 18,
+        "closed": false,
+        "booking": "reservations-recommended",
+        "review_headline": "At Williamsburg's Lilia, it was never about the hype"
+      },
+      {
+        "id": "71faa1ea-1847-4a7c-b24b-72c8b5abdfdd",
+        "name": "Torrisi Bar & Restaurant",
+        "rating": 8.9,
+        "price_tier": 3,
+        "price_label": "EXPENSIVE",
+        "neighborhood": "Nolita",
+        "cuisines": [
+          "American",
+          "Italian"
+        ],
+        "address": "275 Mulberry St",
+        "guide_appearances": 11,
+        "closed": false,
+        "booking": "reservations-recommended",
+        "review_headline": "Torrisi is an expensive place where no expense is spared"
+      },
+      {
+        "id": "9cd44caa-f913-4988-98c8-94f0622264ca",
+        "name": "Una Pizza Napoletana",
+        "rating": 8.9,
+        "price_tier": 2,
+        "price_label": "MODERATELY_EXPENSIVE",
+        "neighborhood": "Lower East Side",
+        "cuisines": [
+          "Pizza",
+          "Italian"
+        ],
+        "address": "175 Orchard St",
+        "guide_appearances": 10,
+        "closed": false,
+        "booking": "reservations-recommended",
+        "review_headline": "In a pizza-obsessed town, Una Pizza Napoletana still stands out"
+      },
+      {
+        "id": "a56a7293-e510-4ade-8175-7f20d2af1f77",
+        "name": "Borgo",
+        "rating": 8.6,
+        "price_tier": 3,
+        "price_label": "EXPENSIVE",
+        "neighborhood": "Nomad",
+        "cuisines": [
+          "Italian"
+        ],
+        "address": "124 E 27th St",
+        "guide_appearances": 8,
+        "closed": false,
+        "booking": "reservations-recommended",
+        "review_headline": "We'd transfer three trains for an elegant, grown-up meal at Borgo"
+      },
+      {
+        "id": "98142683-4a79-4b39-b57a-77f96202a3f6",
+        "name": "Misi",
+        "rating": 8.6,
+        "price_tier": 3,
+        "price_label": "EXPENSIVE",
+        "neighborhood": "Williamsburg",
+        "cuisines": [
+          "Italian"
+        ],
+        "address": "329 Kent Ave",
+        "guide_appearances": 6,
+        "closed": false,
+        "booking": "reservations-recommended",
+        "review_headline": "Misi’s streamlined Italian is ideal for this pasta-obsessed city"
+      }
+    ]
+  },
+  {
+    "tool": "get_restaurant",
+    "label": "Deep dive on top pick",
+    "args": {
+      "id": "49d3919c-1e50-484c-aed4-cc1ca8da78a4",
+      "city": "new-york"
+    },
+    "result": {
+      "id": "49d3919c-1e50-484c-aed4-cc1ca8da78a4",
+      "name": "Via Carota",
+      "rating": 9.5,
+      "price_tier": 3,
+      "price_label": "EXPENSIVE",
+      "address": {
+        "line1": "51 Grove St.",
+        "locality": "New York",
+        "region": "NY",
+        "postal_code": "10014",
+        "latitude": 40.73303122146186,
+        "longitude": -74.00358438491821
+      },
+      "phone": "",
+      "website": "http://www.viacarota.com/",
+      "reservation": {
+        "url": "https://resy.com/cities/new-york-ny/venues/via-carota",
+        "platform": "RESY"
+      },
+      "booking": {
+        "policy": "reservations-available",
+        "notes": null
+      },
+      "closed": false,
+      "source_url": "https://theinfatuation.com/new-york/reviews/via-carota",
+      "review": {
+        "title": "Via Carota",
+        "headline": "There's always a wait at Via Carota, and it's always worth it",
+        "summary": "Via Carota is a mostly walk-in only Italian spot in the West Village, and there’s a good chance you’ll have to wait a few hours for a table. It’s worth it.",
+        "author": "Bryan Kim",
+        "published_at": "2025-08-16T15:00:00.000Z",
+        "url": "https://theinfatuation.com/new-york/reviews/via-carota"
+      },
+      "tags": {
+        "cuisine": [
+          "Italian",
+          "Pasta"
+        ],
+        "neighborhood": [
+          "West Village"
+        ],
+        "occasion": [
+          "Date Nights"
+        ]
+      },
+      "guide_appearances": [
+        {
+          "title": "10 Great Queer-Owned Restaurants In NYC",
+          "url": "https://www.theinfatuation.com/new-york/guides/best-queer-owned-restaurants-nyc",
+          "position": 9,
+          "entry_name": null,
+          "blurb": "Partners Rita Sodi and Jody Williams are behind what might be the most popular Italian restaurant in the city. And their other spots ([Buvette](https://www.theinfatuation.com/new-york/reviews/buvette), [I Sodi](https://www.theinfatuation.com/new-york/reviews/i-sodi), and [Bar Pisellino](https://www.theinfatuation.com/new-york/reviews/bar-pisellino)) aren’t exactly struggling to fill seats either. To merely call Via Carota busy would be an understatement. This restaurant—decorated like an Italian farmhouse—serves uniformly exceptional dishes like cacio e pepe, fried rabbit, and svizzerina. If you don’t snag one of the limited reservations available 30 days out, it might be several hours until you’re seated—quite possibly next to someone who won an Oscar last year."
+        },
+        {
+          "title": "10 Restaurants To Take Tourists To That Won’t Make You Hate Yourself",
+          "url": "https://www.theinfatuation.com/new-york/guides/tourist-restaurants-that-are-actually-good",
+          "position": 3,
+          "entry_name": null,
+          "blurb": "We don’t know exactly why or how everyone who visits this city knows about Via Carota, but they do. And since you, us, and approximately eight million of our neighbors also know about this Italian spot in the West Village, the waits here can be laughably long (since they don’t take reservations). So put your name on their list, check out a few places that come up when you search “nearby bars,” and maybe walk to that [trees-on-stilts](https://littleisland.org/) park you’ve been meaning to check out. Before you know it, you’ll be eating cacio e pepe tonarelli while thinking to yourself: “That wait wasn’t so bad.”"
+        },
+        {
+          "title": "13 To-Go Negronis You Can Order Today",
+          "url": "https://www.theinfatuation.com/new-york/guides/to-go-negronis-nyc",
+          "position": 10,
+          "entry_name": null,
+          "blurb": "LIke I Sodi, Via Carota makes a delicious negroni. This adds up, considering both restaurants are owned by the same team. In addition to their menu of Italian food, they’re selling a 6oz classic negroni you can pick-up or order for delivery. They also have outdoor seating available every day from 11am to 10pm in case you’d like to sit under twinkle lights and later brag to your friends that you were in the presence of _the_ Via Carota salad."
+        },
+        {
+          "title": "Baked By Melissa’s Essential NYC Salads",
+          "url": "https://www.theinfatuation.com/new-york/guides/baked-by-melissa-nyc-salad-guide",
+          "position": 1,
+          "entry_name": null,
+          "blurb": "\"Their little gem salad is just delicious. A little gem salad: if it's on the menu, I'm going to get it. I tend to make salads that have a lot of ingredients. A little gem, when done right, it's simple, it's delicious, it's crunchy, it's refreshing. It hits all the notes. I always wish I ordered more than one. Sometimes I do make everyone order their own because I want my own.\""
+        },
+        {
+          "title": "Michael Imperioli's Favorite NYC Restaurants",
+          "url": "https://www.theinfatuation.com/new-york/guides/michael-imperioli-nyc-restaurant-guide",
+          "position": 7,
+          "entry_name": null,
+          "blurb": "“Jody Williams is an old friend who my brother used to work with back when she was at Gusto, and Giorgione. Jody trained in [Rome](https://www.theinfatuation.com/rome/guides/best-rome-restaurants), so her pastas are incredible and authentic. She also makes one of the best green salads that tastes like a real Sunday Italian dinner—an at-home green salad. It’s very specific, very simple but flavorful, and it tastes like home. And that place has a good vibe, you know?”"
+        },
+        {
+          "title": "The Best Italian Restaurants In NYC",
+          "url": "https://www.theinfatuation.com/new-york/guides/best-italian-restaurants-nyc",
+          "position": 3,
+          "entry_name": null,
+          "blurb": "It's extremely hard to secure a reservation at Via Carota (one of [the best restaurants in NYC](https://www.theinfatuation.com/new-york/guides/best-restaurants-nyc)), and there's pretty much always a wait for walk-ins of two or more hours. Obviously, that's kind of annoying, but it doesn't deter us from eating here. This place manages to stick out among thousands of Italian restaurants in NYC by making food that’s unfussy and uniformly delicious. A meal here should involve some of the dozen-plus vegetable dishes, the steak tartare-like svizzerina, and the cacio e pepe (which is non-optional)."
+        },
+        {
+          "title": "The Best Italian Restaurants In The West Village",
+          "url": "https://www.theinfatuation.com/new-york/guides/best-italian-restaurant-west-village",
+          "position": 1,
+          "entry_name": null,
+          "blurb": "Via Carota is mostly walk-in-only, and every single night you’ll find people lined up in the entryway, waiting for a table with a quiet desperation. Waits can be anywhere from one to three hours, and it confuses us emotionally to say that, yes, this place is worth a three-hour wait. The cacio e pepe is the best in the city, the garlicky chopped steak is richer and more compelling than the majority of non-chopped steaks, and sometimes you just feel like sitting in a dark room with taxidermy, rustic wooden cabinets, and the occasional actor who once starred alongside Scarlett Johansson."
+        },
+        {
+          "title": "The Best Restaurants In The West Village",
+          "url": "https://www.theinfatuation.com/new-york/guides/the-best-restaurants-in-the-west-village",
+          "position": 1,
+          "entry_name": null,
+          "blurb": "Via Carota is always busy, and there are several reasons why. First, the [Italian food](https://www.theinfatuation.com/new-york/guides/best-italian-restaurants-nyc) is exceptional—especially the pasta, fried rabbit, and svizzerina. This restaurant also has an attractive space decorated like an Italian farmhouse, and you might see someone who’s due for their first (or next) Oscar win. Limited reservations are available 30 days out, but if you don’t snag one, you might be told to come back in several hours, so put your name on the list and get some drinks at one of the many [bars within walking distance](https://www.theinfatuation.com/new-york/guides/best-west-village-bars)."
+        },
+        {
+          "title": "The Best Walk-In Only Restaurants For Date Night (When You Didn’t Make A Reservation)",
+          "url": "https://www.theinfatuation.com/new-york/guides/walk-in-only-date-spots-no-reservations",
+          "position": 8,
+          "entry_name": null,
+          "blurb": "If your date hasn’t been to Via Carota, it’s the sort of place that will make anyone say, “How have I never been here?” And if they have been here, then they’ll think you have very good taste. The space is bigger than most West Village Italian spots and it’s usually crowded with people drinking negronis and wine, and eating classic Italian pastas, vegetables, and mains. There will probably be a wait, but it’s worth it."
+        },
+        {
+          "title": "The Manhattan Date Night Delivery Guide",
+          "url": "https://www.theinfatuation.com/new-york/guides/the-manhattan-date-night-delivery-guide",
+          "position": 14,
+          "entry_name": null,
+          "blurb": "Here’s an easy-to-follow, three step guide to date night at home near the West Village: order from Via Carota on Grove Street, [whip up a martini while you wait](https://www.theinfatuation.com/cocktails/cocktails-how-to-make-a-martini), then eat pasta out of real bowls by candlelight. Our top choice available for delivery right now is the tonarelli cacio e pepe, which is extremely rich and cheesy, with chewy noodles and lots of pepper."
+        },
+        {
+          "title": "The NYC Cold Brew, Burgers, & Omelets That Power Antoni Porowski",
+          "url": "https://www.theinfatuation.com/new-york/guides/antoni-porowski-queer-eye-noho-west-village-restaurants",
+          "position": 8,
+          "entry_name": null,
+          "blurb": "\"I literally just came back from there. I had a really good radicchio treviso salad with currants and pine nuts where the greens were kind of wilted. It just takes away a bit of the bitterness. They really rinse the hell out of their bitter greens, which I love, because [the bitterness] is still there, but it's not overwhelming. Every bite is amazing, whether you're getting endive or frisé. They just get the best greens.\""
+        },
+        {
+          "title": "The One-Two Punch Guide: Winter Edition",
+          "url": "https://www.theinfatuation.com/new-york/guides/the-one-two-punch-guide-winter-edition",
+          "position": 14,
+          "entry_name": null,
+          "blurb": "Via Carota doesn’t take reservations, and there are ocassionally waits of up to two hours. Fortunately, we just informed you of this - so now you can just come early and put your name in. Once you do that (and the host writes your name in chalk on a big metal pole), you can go grab a drink somewhere else. This place is just one room in the West Village with floor-to-ceiling windows and a bunch of two-person tables, and your date will probably think it’s either cute, quaint, or both of these things. It also gets bonus points for having plenty of vegetarian options, and the pastas are reliably top-notch."
+        },
+        {
+          "title": "Top 25: The Best Restaurants In NYC",
+          "url": "https://www.theinfatuation.com/new-york/guides/best-restaurants-nyc",
+          "position": 3,
+          "entry_name": null,
+          "blurb": "Sometimes, we’re wrong. It’s rare, but it happens. Our initial review of Via Carota, for example, was pretty lukewarm. But that was back in 2015, a confusing time when bone broth was the beverage du jour and electric hoverboards were catching on fire. With its perfect mix of casual, buzzy atmosphere and impressive, unfussy food, this West Village restaurant has grown on us immensely over the years. It’s one of our favorite [Italian](https://www.theinfatuation.com/new-york/guides/best-italian-restaurants-nyc) spots in Manhattan, slightly edging out the latest iteration of sister restaurant [I Sodi](https://www.theinfatuation.com/new-york/reviews/i-sodi), so swing by for some world-class cacio e pepe and a crisp, towering salad. Just be sure to arrive before 6pm. Via Carota is essentially walk-in only, with very limited reservations, and we aren’t the only ones who love this place."
+        },
+        {
+          "title": "Where Joe Jonas Goes For Pasta, Chicken Parm & Martinis In NYC",
+          "url": "https://www.theinfatuation.com/new-york/guides/joe-jonas-favorite-nyc-restaurants",
+          "position": 1,
+          "entry_name": null,
+          "blurb": "“I spend a lot of time in the West Village, and I love the people who do Via Carota and Buvette. I think they do a really great job. They’re always at the top of the list of restaurants to go to when I’m in town. There’s incredible Italian at Via Carota. You really can’t go wrong, just run down the menu, but you gotta get pasta, and they have a good wine selection.”"
+        },
+        {
+          "title": "Where To Eat At The Bar Right Now In NYC",
+          "url": "https://www.theinfatuation.com/new-york/guides/where-to-eat-at-the-bar-right-now-in-nyc",
+          "position": 9,
+          "entry_name": null,
+          "blurb": "Via Carota is a walk-in-only Italian restaurant in the West Village that has multiple-hour waits more often than not. But one of the benefits of eating alone is that you won’t need to worry about that. Our strategy is to come at an off-hour on a weekend afternoon (around 2 or 3pm). Bring a book and get the big salad or toast with butter and anchovies, plus an order of the tonarelli cacio e pepe and a Negroni for good measure. Then wait about five minutes for the Negroni to kick in and sigh while you congratulate yourself on a life well-lived."
+        },
+        {
+          "title": "Where To Eat Outside In The West Village",
+          "url": "https://www.theinfatuation.com/new-york/guides/where-to-eat-outside-in-the-west-village",
+          "position": 17,
+          "entry_name": null,
+          "blurb": "The world is constantly changing, but there are two things you can pretty much always count on being true: You'll have to wait for a table Via Carota, and it’ll be worth it once the food arrives. Get a table on the sidewalk at this West Village Italian restaurant, order the chopped steak, and spread the roasted garlic cloves over it."
+        },
+        {
+          "title": "Where To Get Some Pasta And A Glass Of Wine By Yourself",
+          "url": "https://www.theinfatuation.com/new-york/guides/pasta-wine-solo-dinner-nyc",
+          "position": 12,
+          "entry_name": null,
+          "blurb": "Via Carota is a walk-in-only restaurant in the West Village that occasionally has multiple-hour waits. But one of the benefits of eating alone is that you won’t need to worry about that. Definitely consider their pasta special—in the past, we’ve had a really good pappardelle with butter and prosciutto."
+        },
+        {
+          "title": "Where To Go When You Can’t Get Into Lilia",
+          "url": "https://www.theinfatuation.com/new-york/guides/italian-restaurants-like-lilia-nyc",
+          "position": 9,
+          "entry_name": null,
+          "blurb": "Via Carota has always been tough to get into, and it seems to get more popular every year. They take some reservations now, but those are usually impossible to get—so just stop by and put your name in for a table. Will you have to wait two to three hours? Probably. But so will everyone else. Hang out at [Marie's Crisis](https://www.theinfatuation.com/new-york/reviews/maries-crisis-cafe) or [Bar Pisellino](https://www.theinfatuation.com/new-york/reviews/bar-pisellino) until you get a text informing you that you're now allowed to eat. The cacio e pepe is essential, as is the chopped steak."
+        },
+        {
+          "title": "Where To Go When You Don’t Want To Make A Big Deal About Your Anniversary",
+          "url": "https://www.theinfatuation.com/new-york/guides/where-to-go-when-you-dont-want-to-make-a-big-deal-about-your-anniversary",
+          "position": 3,
+          "entry_name": null,
+          "blurb": "The ultimate gesture of love would be to put your name down at Via Carota at 5pm and then go back to your apartment to tell your partner they won’t have to wait impatiently for several hours on the sidewalk to eat here. Once you eat Via Carota’s grilled artichokes, chopped steak, and legally-required cacio e pepe, you’ll have likely decided this is your new anniversary tradition. But you should alternate who has to go put a name down every year."
+        },
+        {
+          "title": "Where To Hang Out Near 14 Restaurants With Long Waits",
+          "url": "https://www.theinfatuation.com/new-york/guides/restaurants-with-long-waits-nyc-nearby-bars",
+          "position": 12,
+          "entry_name": null,
+          "blurb": "**The Waiting Room:** [Bar Pisellino](https://www.theinfatuation.com/new-york/reviews/bar-pisellino)\n\n**The Back-Up Plan:** [Marie’s Crisis Cafe](https://www.theinfatuation.com/new-york/reviews/maries-crisis-cafe)\n\nThe team behind Via Carota and nearby [I Sodi](https://www.theinfatuation.com/new-york/reviews/i-sodi) essentially opened a bar to deal with their overflow, and for that we are thankful. [Bar Pisellino](https://www.theinfatuation.com/new-york/reviews/bar-pisellino) in the West Village is within a block of both Italian spots, and it's a picture perfect spot for a spritz and some arancini. Like its restaurant counterparts, this place can get pretty packed with everybody else who’s also waiting patiently for their insalata verde. If there’s a wait for the waiting room, head to [Marie’s Crisis Cafe](https://www.theinfatuation.com/new-york/reviews/maries-crisis-cafe) and sing some show tunes at the divey piano bar instead."
+        },
+        {
+          "title": "Where To Have Your 30th Birthday",
+          "url": "https://www.theinfatuation.com/new-york/guides/30th-birthday-ideas-nyc-birthday-restaurants",
+          "position": 3,
+          "entry_name": null,
+          "blurb": "If your soul searching about your 30th birthday party has resulted in your quest for a “nice place” for a “cozy dinner” with some of your “closest friends,” you should consider Via Carota. It’s an upscale neighborhood Italian place in the West Village, with both a small private room and a large communal table in the dining room that would be great for an intimate dinner with some friends. Get drunk on negronis and pasta and then walk over to any of the nearby bars (Employees Only, Highlands, The Garrett) for a very solid birthday one-two punch."
+        },
+        {
+          "title": "Where To Take Someone Who Just Wants To See A Celebrity",
+          "url": "https://www.theinfatuation.com/new-york/guides/celebrity-sighting-restaurants-nyc",
+          "position": 5,
+          "entry_name": null,
+          "blurb": "Famous people like eating at Via Carota. But not because it’s a party or scene. (Technically it’s the latter, but it definitely isn’t the former.) Via Carota is popular because it’s one of the [best Italian restaurants](https://www.theinfatuation.com/new-york/guides/best-italian-restaurants-nyc) in NYC, and the food is consistently excellent. This place is also in the [West Village](https://www.theinfatuation.com/new-york/guides/the-best-restaurants-in-the-west-village), which doesn’t hurt (see below). Nowadays, this dark, casual, farmhouse-like spot takes some reservations, but it’s still pretty much [walk-in-only](https://www.theinfatuation.com/new-york/guides/walk-in-only-restaurants). You’re going to have to wait several hours for your table, but once you get seated, you might see Adam Driver eating tonarelli."
+        }
+      ]
+    }
+  },
+  {
+    "tool": "compare_restaurants",
+    "label": "Compare the shortlist",
+    "args": {
+      "restaurants": [
+        "49d3919c-1e50-484c-aed4-cc1ca8da78a4",
+        "bb1403b1-9268-4322-8827-92cc8e7ecaac",
+        "71faa1ea-1847-4a7c-b24b-72c8b5abdfdd"
+      ],
+      "city": "new-york"
+    },
+    "result": [
+      {
+        "query": "49d3919c-1e50-484c-aed4-cc1ca8da78a4",
+        "found": true,
+        "id": "49d3919c-1e50-484c-aed4-cc1ca8da78a4",
+        "name": "Via Carota",
+        "rating": 9.5,
+        "price_tier": 3,
+        "neighborhood": "West Village",
+        "cuisines": [
+          "Italian",
+          "Pasta"
+        ],
+        "good_for": [
+          "Date Nights"
+        ],
+        "reservation": true,
+        "booking": "reservations-available",
+        "closed": false,
+        "review_headline": "There's always a wait at Via Carota, and it's always worth it",
+        "guide_appearances": 22
+      },
+      {
+        "query": "bb1403b1-9268-4322-8827-92cc8e7ecaac",
+        "found": true,
+        "id": "bb1403b1-9268-4322-8827-92cc8e7ecaac",
+        "name": "Lilia",
+        "rating": 8.9,
+        "price_tier": 3,
+        "neighborhood": "Williamsburg",
+        "cuisines": [
+          "Italian",
+          "Pasta"
+        ],
+        "good_for": [
+          "Date Nights"
+        ],
+        "reservation": true,
+        "booking": "reservations-recommended",
+        "closed": false,
+        "review_headline": "At Williamsburg's Lilia, it was never about the hype",
+        "guide_appearances": 18
+      },
+      {
+        "query": "71faa1ea-1847-4a7c-b24b-72c8b5abdfdd",
+        "found": true,
+        "id": "71faa1ea-1847-4a7c-b24b-72c8b5abdfdd",
+        "name": "Torrisi Bar & Restaurant",
+        "rating": 8.9,
+        "price_tier": 3,
+        "neighborhood": "Nolita",
+        "cuisines": [
+          "American",
+          "Italian"
+        ],
+        "good_for": [
+          "Date Nights"
+        ],
+        "reservation": true,
+        "booking": "reservations-recommended",
+        "closed": false,
+        "review_headline": "Torrisi is an expensive place where no expense is spared",
+        "guide_appearances": 11
+      }
+    ]
+  },
+  {
+    "tool": "guide_consensus",
+    "label": "Cross-guide consensus: Italian",
+    "args": {
+      "city": "new-york",
+      "theme": "Italian",
+      "limit": 5
+    },
+    "result": [
+      {
+        "id": "48439ef1-a0ea-404a-9032-3f8ba0d0108f",
+        "name": "Emilio’s Ballato",
+        "rating": 8.8,
+        "price_tier": 3,
+        "neighborhoods": [
+          "Nolita"
+        ],
+        "is_closed": 0,
+        "guide_count": 4
+      },
+      {
+        "id": "1494827b-052c-4569-af7e-d4033fd653e9",
+        "name": "Fiaschetteria Pistoia",
+        "rating": 7.9,
+        "price_tier": 2,
+        "neighborhoods": [
+          "West Village",
+          "East Village"
+        ],
+        "is_closed": 0,
+        "guide_count": 4
+      },
+      {
+        "id": "416dadb2-5ebe-489e-9357-237ff48ebde9",
+        "name": "Ortobello's",
+        "rating": 8.4,
+        "price_tier": 2,
+        "neighborhoods": [
+          "Mapleton"
+        ],
+        "is_closed": 0,
+        "guide_count": 3
+      },
+      {
+        "id": "002da597-160c-4334-b0b4-1c13d6ef5617",
+        "name": "Tra Di Noi",
+        "rating": 8.2,
+        "price_tier": 2,
+        "neighborhoods": [
+          "Belmont"
+        ],
+        "is_closed": 0,
+        "guide_count": 3
+      },
+      {
+        "id": "49d3919c-1e50-484c-aed4-cc1ca8da78a4",
+        "name": "Via Carota",
+        "rating": 9.5,
+        "price_tier": 3,
+        "neighborhoods": [
+          "West Village"
+        ],
+        "is_closed": 0,
+        "guide_count": 2
+      }
+    ]
+  }
+]

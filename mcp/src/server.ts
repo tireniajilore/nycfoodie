@@ -93,7 +93,11 @@ export function createMcpServer(): McpServer {
     };
   }
 
-  const cityParam = z.string().describe("City slug, always required. Currently 'new-york'.");
+  const cityParam = z
+    .string()
+    .describe(
+      "City slug, always required. Currently 'new-york', covering the five boroughs plus the immediate metro (within 30 km of Manhattan)."
+    );
 
   const READ_ONLY = { readOnlyHint: true } as const;
   const limitParam = z
@@ -147,16 +151,35 @@ export function createMcpServer(): McpServer {
       .boolean()
       .optional()
       .describe("Include known-closed venues (default false)"),
-    lat: z.number().optional().describe("Latitude for proximity search"),
-    lng: z.number().optional().describe("Longitude for proximity search"),
-    radius_km: z.number().positive().optional().describe("Search radius in kilometres"),
+    lat: z
+      .number()
+      .optional()
+      .describe(
+        "Latitude for proximity search. Must be given together with lng; " +
+          "radius_km defaults to 5 km when omitted. A location outside the " +
+          "NYC coverage area is rejected with an error."
+      ),
+    lng: z
+      .number()
+      .optional()
+      .describe(
+        "Longitude for proximity search. Must be given together with lat; " +
+          "radius_km defaults to 5 km when omitted."
+      ),
+    radius_km: z
+      .number()
+      .positive()
+      .optional()
+      .describe(
+        "Search radius in kilometres (default 5 when lat/lng are given without it). Requires lat and lng."
+      ),
   };
 
   server.registerTool(
     "search_restaurants",
     {
       description:
-        "Search restaurants by free text, cuisine, neighbourhood, occasion or price, optionally near a point. Use when the user describes what they want (e.g. 'Italian date night in the West Village', 'ramen near me') rather than naming a specific restaurant. Returns compact matches with Infatuation rating (0–10), price tier, address and tags. Known-closed venues are excluded by default. With no query or filters, returns the highest-rated venues.",
+        "Search restaurants by free text, cuisine, neighbourhood, occasion or price, optionally near a point. Use when the user describes what they want (e.g. 'Italian date night in the West Village', 'ramen near me') rather than naming a specific restaurant. Free text matches names, tags, review prose and guide blurbs (e.g. 'cacio e pepe'). Returns compact matches with Infatuation rating (0–10), price tier, address and tags. Known-closed venues are excluded by default. Coverage for city='new-york' is the five boroughs plus the immediate metro (within 30 km of Manhattan). With no query or filters, returns the highest-rated venues.",
       annotations: READ_ONLY,
       inputSchema: {
         query: z.string().optional().describe("Free text, e.g. 'date-night Italian'"),

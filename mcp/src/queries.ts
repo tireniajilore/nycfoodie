@@ -133,6 +133,49 @@ function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): nu
   return 2 * r * Math.asin(Math.sqrt(a));
 }
 
+// Coverage for city='new-york': the five boroughs plus the immediate metro.
+// Venues beyond this radius from central Manhattan (e.g. Westchester, the
+// Hamptons) are out of scope for discovery tools — they stay in the database
+// but never surface under city='new-york'.
+const NYC_CENTER_LAT = 40.758;
+const NYC_CENTER_LNG = -73.9855;
+const NYC_COVERAGE_KM = 30;
+const DEG_TO_RAD = 0.017453292519943295;
+
+/** SQL fragment: true when the primary listing is inside the NYC coverage area. */
+const NYC_COVERAGE_SQL = `(pl.latitude IS NULL OR (6371 * 2 * asin(sqrt(
+  pow(sin((pl.latitude - ${NYC_CENTER_LAT}) * ${DEG_TO_RAD}) / 2, 2) +
+  cos(${NYC_CENTER_LAT} * ${DEG_TO_RAD}) * cos(pl.latitude * ${DEG_TO_RAD}) *
+  pow(sin((pl.longitude - ${NYC_CENTER_LNG}) * ${DEG_TO_RAD}) / 2, 2)
+))) <= ${NYC_COVERAGE_KM})`;
+
+/** Truncate prose to a word boundary; null in, null out. */
+function truncate(s: string | null | undefined, max: number): string | null {
+  if (!s) return null;
+  const t = s.trim().replace(/\s+/g, " ");
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max);
+  const lastSpace = cut.lastIndexOf(" ");
+  return (lastSpace > max * 0.5 ? cut.slice(0, lastSpace) : cut).trimEnd() + "…";
+}
+
+/**
+ * The canonical collapsed neighbourhood: the primary listing's neighbourhood
+ * tags, deduplicated, alphabetical, first — one deterministic rule every tool
+ * follows, so search cards and comparisons never disagree.
+ */
+function canonicalNeighborhood(labels: string[], fallback: string | null): string | null {
+  const uniq = [...new Set(labels.map((s) => s.trim()).filter(Boolean))].sort();
+  if (uniq.length > 0) return uniq[0];
+  const f = fallback?.trim();
+  return f ? f : null;
+}
+
+/** Escape a free-text token as an FTS5 phrase query. */
+function ftsPhrase(token: string): string {
+  return `"${token.replace(/"/g, '""')}"`;
+}
+
 interface CardRow {
   id: string;
   name: string;
@@ -145,17 +188,23 @@ interface CardRow {
   longitude: number | null;
   is_closed: number | null;
   booking_policy: string | null;
+  wait_notes: string | null;
   reservation_url: string | null;
   cuisines: string | null;
   neighborhoods: string | null;
   guide_count: number;
   review_headline: string | null;
+  review_summary: string | null;
 }
 
 function buildWhere(f: Filters, params: unknown[]): string {
   const conds: string[] = ["r.city_slug = ?"];
   params.push(f.city);
   if (!f.includeClosed) conds.push("(pl.is_closed IS NULL OR pl.is_closed = 0)");
+  if (f.city === "new-york") {
+    // Scope discovery to the NYC coverage area (five boroughs + near metro).
+    conds.push(NYC_COVERAGE_SQL);
+  }
   if (f.minRating) {
     conds.push("pl.rating >= ?");
     params.push(f.minRating);
@@ -164,13 +213,21 @@ function buildWhere(f: Filters, params: unknown[]): string {
     conds.push("pl.price_tier = ?");
     params.push(f.priceTier);
   }
-  const tagFilter = (kind: string, value: string) => {
+  // scope 'restaurant': match a tag on ANY of the restaurant's listings, not
+  // just the primary — a venue must not vanish under one of its own
+  // neighbourhoods (or cuisines) because the primary listing is elsewhere.
+  const tagFilter = (kind: string, value: string, scope: "primary" | "restaurant" = "primary") => {
     // Hyphens act as wildcards: 'date-night' matches 'Date Nights',
     // 'Bedford-Stuyvesant' still matches literally.
     const pattern = `%${likeEscape(value).replace(/-/g, "%")}%`;
+    const owner =
+      scope === "restaurant"
+        ? `JOIN source_listings sl2 ON sl2.id = lt.source_listing_id
+           WHERE sl2.restaurant_id = r.id`
+        : `WHERE lt.source_listing_id = pl.id`;
     conds.push(
       `EXISTS (SELECT 1 FROM listing_tags lt JOIN tags t ON t.id = lt.tag_id
-        WHERE lt.source_listing_id = pl.id AND t.kind = ? AND t.label LIKE ? ESCAPE '\\')`
+        ${owner} AND t.kind = ? AND t.label LIKE ? ESCAPE '\\')`
     );
     params.push(kind, pattern);
   };
@@ -178,28 +235,33 @@ function buildWhere(f: Filters, params: unknown[]): string {
   if (f.neighborhood) {
     const borough = boroughNeighborhoods(f.neighborhood);
     if (borough) {
-      // Borough expansion: match any of its neighborhoods.
+      // Borough expansion: match any of its neighborhoods, on any listing.
       const ors = borough.map(() => `t.label LIKE ? ESCAPE '\\'`).join(" OR ");
       conds.push(
         `EXISTS (SELECT 1 FROM listing_tags lt JOIN tags t ON t.id = lt.tag_id
-          WHERE lt.source_listing_id = pl.id AND t.kind = 'neighborhood' AND (${ors}))`
+          JOIN source_listings sl2 ON sl2.id = lt.source_listing_id
+          WHERE sl2.restaurant_id = r.id AND t.kind = 'neighborhood' AND (${ors}))`
       );
       for (const n of borough) params.push(`%${likeEscape(n)}%`);
     } else {
-      tagFilter("neighborhood", f.neighborhood);
+      tagFilter("neighborhood", f.neighborhood, "restaurant");
     }
   }
   if (f.occasion) tagFilter("occasion", f.occasion);
   if (f.query) {
     // Hyphens are token separators: 'date-night Italian' -> date, night, Italian.
+    // Each token matches the name, a tag, or the full-text index over review
+    // prose and guide blurbs — dishes live in prose, not in names.
     for (const tok of f.query.split(/[\s-]+/).filter(Boolean)) {
       conds.push(
         `(r.name LIKE ? ESCAPE '\\' OR pl.name LIKE ? ESCAPE '\\'
           OR EXISTS (SELECT 1 FROM listing_tags lt JOIN tags t ON t.id = lt.tag_id
-            WHERE lt.source_listing_id = pl.id AND t.label LIKE ? ESCAPE '\\'))`
+            WHERE lt.source_listing_id = pl.id AND t.label LIKE ? ESCAPE '\\')
+          OR EXISTS (SELECT 1 FROM listing_text_fts fts
+            WHERE fts.source_listing_id = pl.id AND fts.text MATCH ?))`
       );
       const p = `%${likeEscape(tok)}%`;
-      params.push(p, p, p);
+      params.push(p, p, p, ftsPhrase(tok));
     }
   }
   if (f.lat !== undefined && f.lng !== undefined && f.radiusKm !== undefined) {
@@ -219,14 +281,15 @@ const CARD_SELECT = `
   SELECT r.id, r.name,
     pl.rating, pl.price_tier, pl.price_label, pl.locality,
     pl.address_line1, pl.latitude, pl.longitude, pl.is_closed, pl.booking_policy,
-    pl.reservation_url,
+    pl.wait_notes, pl.reservation_url,
     (SELECT GROUP_CONCAT(t.label, '|') FROM listing_tags lt JOIN tags t ON t.id = lt.tag_id
       WHERE lt.source_listing_id = pl.id AND t.kind = 'cuisine') AS cuisines,
     (SELECT GROUP_CONCAT(t.label, '|') FROM listing_tags lt JOIN tags t ON t.id = lt.tag_id
       WHERE lt.source_listing_id = pl.id AND t.kind = 'neighborhood') AS neighborhoods,
     (SELECT COUNT(DISTINCT ge.guide_id) FROM guide_entries ge
       WHERE ge.source_listing_id = pl.id) AS guide_count,
-    rv.headline AS review_headline
+    rv.headline AS review_headline,
+    rv.summary AS review_summary
   FROM restaurants r
   JOIN primary_listings pl ON pl.restaurant_id = r.id
   LEFT JOIN reviews rv ON rv.source_listing_id = pl.id`;
@@ -238,15 +301,23 @@ function toCard(row: CardRow, distanceKm?: number): Record<string, unknown> {
     rating: row.rating,
     price_tier: row.price_tier,
     price_label: row.price_label,
-    neighborhood: row.neighborhoods?.split("|").find((s) => s.trim()) ?? row.locality,
-    cuisines: row.cuisines?.split("|").filter((s) => s.trim()) ?? [],
+    neighborhood: canonicalNeighborhood(
+      row.neighborhoods?.split("|") ?? [],
+      row.locality
+    ),
+    cuisines: [...new Set((row.cuisines?.split("|") ?? []).map((s) => s.trim()).filter(Boolean))],
     address: row.address_line1,
     guide_appearances: row.guide_count,
     closed: row.is_closed === 1,
   };
-  // A reservation link means booking is possible even without a stated policy.
-  card.booking = row.booking_policy ?? (row.reservation_url ? "reservations-available" : null);
-  if (row.review_headline) card.review_headline = row.review_headline;
+  // One booking shape everywhere: an object, or null. A reservation link
+  // means booking is possible even without a stated policy.
+  const bookingPolicy = row.booking_policy ?? (row.reservation_url ? "reservations-available" : null);
+  card.booking = bookingPolicy
+    ? { policy: bookingPolicy, notes: row.wait_notes ?? null }
+    : null;
+  const headline = row.review_headline ?? truncate(row.review_summary, 160);
+  if (headline) card.review_headline = headline;
   if (distanceKm !== undefined) card.distance_km = Math.round(distanceKm * 10) / 10;
   return card;
 }
@@ -258,8 +329,34 @@ export function searchRestaurants(
   sort: "rating" | "guides" | "distance" = "rating"
 ): Record<string, unknown>[] {
   requireCity(db, f.city);
+  // Geo parameters are all-or-nothing: a lone lat, lng or radius_km is a
+  // caller error, never silently ignored. lat+lng without a radius searches
+  // within a 5 km default.
+  const latDef = f.lat !== undefined;
+  const lngDef = f.lng !== undefined;
+  const radDef = f.radiusKm !== undefined;
+  if (latDef !== lngDef || (radDef && !(latDef && lngDef))) {
+    throw new Error(
+      "Geo search needs 'lat' and 'lng' together; 'radius_km' is optional " +
+        "(defaults to 5 km) and requires both."
+    );
+  }
+  const radiusKm = latDef && lngDef ? (f.radiusKm ?? 5) : undefined;
+  const geo = radiusKm !== undefined;
+  if (geo) {
+    // The query point must be able to reach the coverage area; a "near me"
+    // from another city is an error, not an empty list.
+    const d = haversineKm(f.lat!, f.lng!, NYC_CENTER_LAT, NYC_CENTER_LNG);
+    if (d > NYC_COVERAGE_KM + radiusKm) {
+      throw new Error(
+        `Location (${f.lat}, ${f.lng}) is outside the New York coverage area ` +
+          `(${NYC_COVERAGE_KM} km around Manhattan).`
+      );
+    }
+  }
+  const nf: Filters = { ...f, radiusKm };
   const params: unknown[] = [];
-  const where = buildWhere(f, params);
+  const where = buildWhere(nf, params);
   const order =
     sort === "guides"
       ? "guide_count DESC, pl.rating DESC"
@@ -267,16 +364,15 @@ export function searchRestaurants(
   const rows = db
     .prepare(`${CARD_SELECT} ${where} ORDER BY ${order} LIMIT ?`)
     .all(...params, limit) as CardRow[];
-  const geo = f.lat !== undefined && f.lng !== undefined && f.radiusKm !== undefined;
   let cards = rows.map((r) => {
     const d =
       geo && r.latitude !== null && r.longitude !== null
-        ? haversineKm(f.lat!, f.lng!, r.latitude, r.longitude)
+        ? haversineKm(nf.lat!, nf.lng!, r.latitude, r.longitude)
         : undefined;
     return { card: toCard(r, d), d };
   });
   if (geo) {
-    cards = cards.filter((c) => c.d !== undefined && c.d <= f.radiusKm!);
+    cards = cards.filter((c) => c.d !== undefined && c.d <= radiusKm);
     if (sort === "distance" || sort === "rating") {
       cards.sort((a, b) =>
         sort === "distance" ? a.d! - b.d! : b.card.rating as number - (a.card.rating as number)
@@ -392,6 +488,7 @@ export function getRestaurant(
     .prepare(
       `WITH ${PRIMARY_LISTINGS_CTE}
       SELECT r.name,
+        pl.id AS primary_listing_id,
         pl.rating, pl.price_tier, pl.price_label, pl.address_line1, pl.locality,
         pl.region, pl.postal_code, pl.latitude, pl.longitude, pl.phone, pl.website,
         pl.reservation_url, pl.reservation_platform, pl.booking_policy, pl.wait_notes,
@@ -418,8 +515,20 @@ export function getRestaurant(
   const grouped: Record<string, string[]> = {};
   for (const t of tags) {
     if (!t.label.trim()) continue; // safety net: skip empty-label tags
-    (grouped[t.kind] ??= []).push(t.label);
+    const arr = (grouped[t.kind] ??= []);
+    if (!arr.includes(t.label)) arr.push(t.label); // dedupe across listings
   }
+  // Canonical collapsed neighbourhood: the primary listing's tags, same rule
+  // as search cards, so tools never disagree about it.
+  const primaryNeighborhoods = (
+    db
+      .prepare(
+        `SELECT t.label FROM listing_tags lt
+         JOIN tags t ON t.id = lt.tag_id
+         WHERE lt.source_listing_id = ? AND t.kind = 'neighborhood'`
+      )
+      .all(row.primary_listing_id) as { label: string }[]
+  ).map((x) => x.label);
   const guides = db
     .prepare(
       `SELECT g.title, g.url, ge.position, ge.entry_name, ge.blurb FROM guide_entries ge
@@ -431,7 +540,7 @@ export function getRestaurant(
     .all(r.id) as Record<string, unknown>[];
   const review: Record<string, unknown> = {
     title: row.review_title,
-    headline: row.review_headline,
+    headline: row.review_headline ?? truncate(row.review_summary as string | null, 160),
     summary: row.review_summary,
     author: row.review_author,
     published_at: row.review_published_at,
@@ -444,6 +553,7 @@ export function getRestaurant(
     rating: row.rating,
     price_tier: row.price_tier,
     price_label: row.price_label,
+    neighborhood: canonicalNeighborhood(primaryNeighborhoods, row.locality as string | null),
     address: {
       line1: row.address_line1,
       locality: row.locality,
@@ -494,11 +604,12 @@ export function compareRestaurants(
       name: full.name,
       rating: full.rating,
       price_tier: full.price_tier,
-      neighborhood: (full.tags as Record<string, string[]>).neighborhood?.[0] ?? null,
+      neighborhood: full.neighborhood,
       cuisines: (full.tags as Record<string, string[]>).cuisine ?? [],
       good_for: ((full.tags as Record<string, string[]>).occasion ?? []).slice(0, 5),
-      reservation: full.reservation ? true : false,
-      booking: (full.booking as { policy: string } | null)?.policy ?? null,
+      // Same shapes as get_restaurant: objects, or null.
+      reservation: full.reservation,
+      booking: full.booking,
       closed: full.closed,
       review_headline: (full.review as { headline: string } | null)?.headline ?? null,
       guide_appearances: (full.guide_appearances as unknown[]).length,
@@ -558,6 +669,7 @@ export function findSimilar(
     )
     .get(r.id) as { id: string } | undefined;
   if (!mine) return [];
+  const coverage = city === "new-york" ? `AND ${NYC_COVERAGE_SQL}` : "";
   const rows = db
     .prepare(
       `WITH ${PRIMARY_LISTINGS_CTE}, my_tags AS (
@@ -571,8 +683,11 @@ export function findSimilar(
        SELECT r.id, r.name, pl.rating, pl.price_tier,
          (SELECT GROUP_CONCAT(t.label, '|') FROM listing_tags lt JOIN tags t ON t.id = lt.tag_id
            WHERE lt.source_listing_id = pl.id AND t.kind = 'neighborhood') AS neighborhoods,
-         COALESCE(SUM(CASE mt.kind WHEN 'cuisine' THEN 3 WHEN 'occasion' THEN 2
-           WHEN 'neighborhood' THEN 2 ELSE 1 END), 0) AS tag_score,
+         -- Only SHARED tags score: an unmatched candidate tag (mt.tag_id NULL)
+         -- contributes 0, so tag breadth alone can never rank a venue.
+         COALESCE(SUM(CASE WHEN mt.tag_id IS NULL THEN 0
+           WHEN mt.kind = 'cuisine' THEN 3 WHEN mt.kind = 'occasion' THEN 2
+           WHEN mt.kind = 'neighborhood' THEN 2 ELSE 1 END), 0) AS tag_score,
          (SELECT COUNT(*) FROM guide_entries ge
            WHERE ge.source_listing_id = pl.id
              AND ge.guide_id IN (SELECT guide_id FROM my_guides)) AS guide_overlap
@@ -582,6 +697,7 @@ export function findSimilar(
        LEFT JOIN my_tags mt ON mt.tag_id = lt.tag_id
        WHERE r.city_slug = ? AND r.id != ?
          AND (pl.is_closed IS NULL OR pl.is_closed = 0)
+         ${coverage}
        GROUP BY r.id
        HAVING tag_score > 0 OR guide_overlap > 0
        ORDER BY (tag_score + guide_overlap * 2) DESC, pl.rating DESC
@@ -593,7 +709,10 @@ export function findSimilar(
     name: row.name,
     rating: row.rating,
     price_tier: row.price_tier,
-    neighborhood: (row.neighborhoods as string | null)?.split("|")[0] ?? null,
+    neighborhood: canonicalNeighborhood(
+      ((row.neighborhoods as string | null)?.split("|") ?? []),
+      null
+    ),
     similarity: (row.tag_score as number) + (row.guide_overlap as number) * 2,
     shared_guides: row.guide_overlap,
   }));

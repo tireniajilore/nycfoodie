@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NYCfoodie — watch an agent plan dinner</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#0f0f12;color:#e8e8ea;font-family:system-ui,-apple-system,sans-serif;display:flex;justify-content:center;min-height:100vh}
+.wrap{width:100%;max-width:620px;padding:24px 16px 64px}
+header{text-align:center;margin-bottom:20px}header h1{font-size:1.4rem;margin:0 0 4px}header p{color:#9a9aa0;font-size:.9rem;margin:0}
+.msg{margin:14px 0;opacity:0;transform:translateY(8px);transition:opacity .4s,transform .4s}.msg.show{opacity:1;transform:none}
+.bubble{display:inline-block;padding:10px 14px;border-radius:16px;max-width:100%;line-height:1.5}
+.user{text-align:right}.user .bubble{background:#2b5cff;color:#fff;border-bottom-right-radius:4px;text-align:left}
+.agent{display:flex;gap:10px}.agent .bubble{background:#1c1c21;border-bottom-left-radius:4px}
+.avatar{font-size:1.4rem}
+.tool .chip{display:inline-block;background:#141419;border:1px solid #2e2e38;color:#8ef0a0;font-family:ui-monospace,monospace;font-size:.78rem;padding:6px 10px;border-radius:8px;margin-bottom:6px}
+.tool .args{color:#7a7a85}
+.tresult{background:#141419;border:1px solid #2e2e38;border-radius:12px;padding:12px 14px;margin-left:8px}
+.tcap{color:#9a9aa0;font-size:.8rem;margin-bottom:8px}
+.res{display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-top:1px solid #23232b}.res:first-of-type{border-top:none}
+.hood{color:#9a9aa0;font-size:.8rem;margin-left:8px}
+.rating{font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap}
+.stars{color:#f5b301;font-size:.85rem}.gc{color:#8ef0a0;font-size:.85rem}
+.headline{font-style:italic;color:#c9c9d1;margin:10px 0 2px}
+.cta{display:inline-block;margin-top:10px;background:#2b5cff;color:#fff;text-decoration:none;padding:8px 16px;border-radius:10px;font-weight:600}
+footer{text-align:center;color:#6a6a72;font-size:.8rem;margin-top:32px}
+#replay{display:block;margin:8px auto 0;background:#1c1c21;color:#e8e8ea;border:1px solid #2e2e38;border-radius:10px;padding:8px 20px;cursor:pointer;font-size:.9rem}
+</style></head><body><div class="wrap">
+<header><h1>🍝 NYCfoodie</h1><p>Watch an AI agent plan date night — powered by the NYCfoodie MCP server</p></header>
+<div id="chat">
+<div class="msg user" data-i="0"><div class="bubble">Find me a romantic Italian spot for date night in the West Village. Somewhere the critics actually love.</div></div>
+<div class="msg tool" data-i="1"><div class="chip">⚙️ search_restaurants <span class="args">query=&quot;date night Italian&quot; city=&quot;new-york&quot;</span></div><div class="tresult"><div class="tcap">3 candidates, ranked by critic rating</div><div class="res"><div><b>Via Carota</b><span class="hood"></span></div><div class="rating">9.5 <span class="stars">★★★★★</span></div></div>
+<div class="res"><div><b>Lilia</b><span class="hood"></span></div><div class="rating">8.9 <span class="stars">★★★★☆</span></div></div>
+<div class="res"><div><b>Torrisi Bar &amp; Restaurant</b><span class="hood"></span></div><div class="rating">8.9 <span class="stars">★★★★☆</span></div></div></div></div>
+<div class="msg tool" data-i="2"><div class="chip">⚙️ get_restaurant <span class="args">id=&quot;Via Carota&quot; city=&quot;new-york&quot;</span></div><div class="tresult"><div class="tcap">Full picture: review, booking intel, Resy link</div><div class="res"><div><b>Via Carota</b><span class="hood">51 Grove St. · West Village</span></div><div class="rating">9.5 <span class="stars">★★★★★</span></div></div><p class="headline">“There&#x27;s always a wait at Via Carota, and it&#x27;s always worth it”</p></div></div>
+<div class="msg tool" data-i="3"><div class="chip">⚙️ compare_restaurants <span class="args">restaurants=&quot;[&#x27;Via Carota&#x27;, &#x27;Lilia&#x27;, &#x27;Torrisi&#x27;]&quot; city=&quot;new-york&quot;</span></div><div class="tresult"><div class="tcap">Head-to-head on the shortlist</div><div class="res"><div><b>Via Carota</b><span class="hood">West Village · $$$</span></div><div class="rating">9.5 <span class="stars">★★★★★</span></div></div>
+<div class="res"><div><b>Lilia</b><span class="hood">Williamsburg · $$$</span></div><div class="rating">8.9 <span class="stars">★★★★☆</span></div></div>
+<div class="res"><div><b>Torrisi Bar &amp; Restaurant</b><span class="hood">Nolita · $$$</span></div><div class="rating">8.9 <span class="stars">★★★★☆</span></div></div></div></div>
+<div class="msg tool" data-i="4"><div class="chip">⚙️ guide_consensus <span class="args">theme=&quot;Italian&quot; city=&quot;new-york&quot;</span></div><div class="tresult"><div class="tcap">Cross-guide consensus — who can&#x27;t you go wrong with?</div><div class="res"><div><b>Emilio’s Ballato</b></div><div class="rating">8.8 · <span class="gc">4 guides</span></div></div>
+<div class="res"><div><b>Fiaschetteria Pistoia</b></div><div class="rating">7.9 · <span class="gc">4 guides</span></div></div>
+<div class="res"><div><b>Ortobello&#x27;s</b></div><div class="rating">8.4 · <span class="gc">3 guides</span></div></div></div></div>
+<div class="msg agent" data-i="5"><div class="avatar">🍝</div><div class="bubble">Via Carota. 9.5 from the critics — the highest-rated Italian date-night spot in the data — and it shows up across the guides. Heads up: it&#x27;s mostly walk-in, expect a wait, and it&#x27;s worth it.<a class="cta" href="https://resy.com/cities/new-york-ny/venues/via-carota">Book on Resy →</a></div></div>
+</div>
+<button id="replay">↻ Replay</button>
+<footer>Real session replay · live data from the NYCfoodie MCP endpoint · nycfoodie-production.up.railway.app/mcp</footer>
+</div>
+<script>
+const msgs=[...document.querySelectorAll('.msg')];let t;
+function play(){clearTimeout(t);msgs.forEach(m=>m.classList.remove('show'));let i=0;
+(function next(){if(i>=msgs.length)return;msgs[i].classList.add('show');msgs[i].scrollIntoView({behavior:'smooth',block:'nearest'});i++;t=setTimeout(next,i===1?900:1600);})();}
+document.getElementById('replay').onclick=play;play();
+</script></body></html>
