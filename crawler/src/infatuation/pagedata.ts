@@ -22,6 +22,7 @@ export interface EnrichedVenue {
   instagram: string | null;
   price: number | null;
   closed: boolean | null;
+  closedStatus: string | null;
   lat: number | null;
   lon: number | null;
   reservationUrl: string | null;
@@ -231,6 +232,7 @@ export function extractReview(state: ApolloState): EnrichedReview | null {
       instagram: (venue["instagram"] as string) ?? null,
       price: typeof venue["price"] === "number" ? (venue["price"] as number) : null,
       closed: typeof venue["closed"] === "boolean" ? (venue["closed"] as boolean) : null,
+      closedStatus: typeof venue["closedStatus"] === "string" ? (venue["closedStatus"] as string) : null,
       lat: typeof latlong["lat"] === "number" ? (latlong["lat"] as number) : null,
       lon: typeof latlong["lon"] === "number" ? (latlong["lon"] as number) : null,
       reservationUrl: (reservation?.["reservationUrl"] as string) ?? null,

@@ -244,6 +244,9 @@ export function upsertReviewListing(
     typical_wait_minutes: null,
     wait_notes: intel.waitNotes,
     hours_json: null,
+    is_closed:
+      venue?.closed === true ? 1 : venue?.closed === false ? 0 : null,
+    closed_status: venue?.closedStatus ?? null,
     phone: venue?.phone ?? raw.placeKnownTelephoneNumber ?? null,
     website: venue?.url ?? raw.placeUrl ?? null,
     address_line1: venue?.street ?? raw.placeStreetName ?? null,
