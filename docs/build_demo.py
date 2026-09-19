@@ -52,7 +52,7 @@ steps = [
     ("tool", "guide_consensus", {"theme": "Italian", "city": "new-york"},
      "Cross-guide consensus — who can't you go wrong with?", consensus_rows),
     ("agent", None, None,
-     "Via Carota. 9.5 from the critics — the highest-rated Italian date-night spot in the data — and it shows up across the guides. Heads up: it's mostly walk-in, expect a wait, and it's worth it.",
+     "Via Carota. 9.5 from the critics — the highest-rated match in the shortlist. Heads up: it's mostly walk-in, expect a wait, and it's worth it.",
      f'<a class="cta" href="{esc(resy)}">Book on Resy →</a>' if resy else ""),
 ]
 

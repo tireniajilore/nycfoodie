@@ -123,6 +123,42 @@ function boroughNeighborhoods(value: string): string[] | null {
   return BOROUGHS[value.trim().toLowerCase()] ?? null;
 }
 
+/**
+ * Which neighbourhood tag satisfied an active neighbourhood filter, so the
+ * card can explain the match. Round 4: Fish Cheeks' primary listing is
+ * Williamsburg but it matches neighborhood='Noho' via its NOHO-tagged
+ * listing — the filter is tag-based (not prose-based), and without this the
+ * card looks like a false positive. Uses the same match rule and the same
+ * closed-listing exclusion as the filter itself.
+ */
+function matchedNeighborhoodLabel(
+  db: Database,
+  restaurantId: string,
+  filterValue: string,
+  includeClosed: boolean | undefined
+): string | null {
+  const borough = boroughNeighborhoods(filterValue);
+  const labels = (
+    db
+      .prepare(
+        `SELECT DISTINCT t.label FROM listing_tags lt
+         JOIN tags t ON t.id = lt.tag_id
+         JOIN source_listings sl ON sl.id = lt.source_listing_id
+         WHERE sl.restaurant_id = ? AND t.kind = 'neighborhood'
+         ${includeClosed ? "" : "AND (sl.is_closed IS NULL OR sl.is_closed = 0)"}
+         ORDER BY t.label`
+      )
+      .all(restaurantId) as { label: string }[]
+  ).map((r) => r.label);
+  if (borough) {
+    const set = new Set(borough.map((b) => b.trim().toLowerCase()));
+    return labels.find((l) => set.has(l.trim().toLowerCase())) ?? null;
+  }
+  // Same rule as the SQL LIKE in buildWhere: hyphens are wildcards.
+  const re = new RegExp(escapeRegExp(filterValue.trim()).replace(/-/g, ".*"), "i");
+  return labels.find((l) => re.test(l)) ?? null;
+}
+
 function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
   const r = 6371;
   const dLat = ((bLat - aLat) * Math.PI) / 180;
@@ -157,6 +193,23 @@ function truncate(s: string | null | undefined, max: number): string | null {
   const cut = t.slice(0, max);
   const lastSpace = cut.lastIndexOf(" ");
   return (lastSpace > max * 0.5 ? cut.slice(0, lastSpace) : cut).trimEnd() + "…";
+}
+
+/**
+ * The source sometimes stores the summary text in the headline column
+ * (Round 4: Atla's headline and summary are byte-identical) — that is not a
+ * headline. Treat a missing or summary-duplicating headline as absent so the
+ * detail stays honest; cards keep their truncated-summary fallback for the
+ * display line (Round 2/3: no blank headlines).
+ */
+function realHeadline(
+  headline: string | null | undefined,
+  summary: string | null | undefined
+): string | null {
+  const h = headline?.trim();
+  if (!h) return null;
+  if (summary && h === summary.trim()) return null;
+  return h;
 }
 
 /**
@@ -220,10 +273,15 @@ function buildWhere(f: Filters, params: unknown[]): string {
     // Hyphens act as wildcards: 'date-night' matches 'Date Nights',
     // 'Bedford-Stuyvesant' still matches literally.
     const pattern = `%${likeEscape(value).replace(/-/g, "%")}%`;
+    // A shuttered location's tags must not make the venue match: unless
+    // include_closed is set, tags on listings marked closed are ignored, so
+    // a closed Noho outpost doesn't surface under neighborhood='Noho'.
+    const openListings =
+      f.includeClosed || scope === "primary" ? "" : "AND (sl2.is_closed IS NULL OR sl2.is_closed = 0)";
     const owner =
       scope === "restaurant"
         ? `JOIN source_listings sl2 ON sl2.id = lt.source_listing_id
-           WHERE sl2.restaurant_id = r.id`
+           WHERE sl2.restaurant_id = r.id ${openListings}`
         : `WHERE lt.source_listing_id = pl.id`;
     conds.push(
       `EXISTS (SELECT 1 FROM listing_tags lt JOIN tags t ON t.id = lt.tag_id
@@ -237,10 +295,11 @@ function buildWhere(f: Filters, params: unknown[]): string {
     if (borough) {
       // Borough expansion: match any of its neighborhoods, on any listing.
       const ors = borough.map(() => `t.label LIKE ? ESCAPE '\\'`).join(" OR ");
+      const openListings = f.includeClosed ? "" : "AND (sl2.is_closed IS NULL OR sl2.is_closed = 0)";
       conds.push(
         `EXISTS (SELECT 1 FROM listing_tags lt JOIN tags t ON t.id = lt.tag_id
           JOIN source_listings sl2 ON sl2.id = lt.source_listing_id
-          WHERE sl2.restaurant_id = r.id AND t.kind = 'neighborhood' AND (${ors}))`
+          WHERE sl2.restaurant_id = r.id AND t.kind = 'neighborhood' AND (${ors}) ${openListings})`
       );
       for (const n of borough) params.push(`%${likeEscape(n)}%`);
     } else {
@@ -294,7 +353,11 @@ const CARD_SELECT = `
   JOIN primary_listings pl ON pl.restaurant_id = r.id
   LEFT JOIN reviews rv ON rv.source_listing_id = pl.id`;
 
-function toCard(row: CardRow, distanceKm?: number): Record<string, unknown> {
+function toCard(
+  row: CardRow,
+  distanceKm?: number,
+  matchedNeighborhood?: string | null
+): Record<string, unknown> {
   const card: Record<string, unknown> = {
     id: row.id,
     name: row.name,
@@ -310,13 +373,18 @@ function toCard(row: CardRow, distanceKm?: number): Record<string, unknown> {
     guide_appearances: row.guide_count,
     closed: row.is_closed === 1,
   };
+  // Present only when a neighbourhood filter is active: which of the venue's
+  // neighbourhoods satisfied it. May differ from the canonical neighbourhood
+  // for multi-location venues (e.g. Fish Cheeks matches 'Noho' via its
+  // NOHO-tagged listing while the primary is Williamsburg).
+  if (matchedNeighborhood !== undefined) card.matched_neighborhood = matchedNeighborhood;
   // One booking shape everywhere: an object, or null. A reservation link
   // means booking is possible even without a stated policy.
   const bookingPolicy = row.booking_policy ?? (row.reservation_url ? "reservations-available" : null);
   card.booking = bookingPolicy
     ? { policy: bookingPolicy, notes: row.wait_notes ?? null }
     : null;
-  const headline = row.review_headline ?? truncate(row.review_summary, 160);
+  const headline = realHeadline(row.review_headline, row.review_summary) ?? truncate(row.review_summary, 160);
   if (headline) card.review_headline = headline;
   if (distanceKm !== undefined) card.distance_km = Math.round(distanceKm * 10) / 10;
   return card;
@@ -369,7 +437,13 @@ export function searchRestaurants(
       geo && r.latitude !== null && r.longitude !== null
         ? haversineKm(nf.lat!, nf.lng!, r.latitude, r.longitude)
         : undefined;
-    return { card: toCard(r, d), d };
+    // When a neighbourhood filter is active, say which neighbourhood
+    // satisfied it — the match may come from a non-primary listing.
+    const matched =
+      nf.neighborhood !== undefined
+        ? matchedNeighborhoodLabel(db, r.id, nf.neighborhood, nf.includeClosed)
+        : undefined;
+    return { card: toCard(r, d, matched), d };
   });
   if (geo) {
     cards = cards.filter((c) => c.d !== undefined && c.d <= radiusKm);
@@ -540,7 +614,9 @@ export function getRestaurant(
     .all(r.id) as Record<string, unknown>[];
   const review: Record<string, unknown> = {
     title: row.review_title,
-    headline: row.review_headline ?? truncate(row.review_summary as string | null, 160),
+    // Honest headline: the source's real headline, or null when it has none
+    // (a stored headline identical to the summary is not a headline).
+    headline: realHeadline(row.review_headline as string | null, row.review_summary as string | null),
     summary: row.review_summary,
     author: row.review_author,
     published_at: row.review_published_at,
@@ -611,7 +687,10 @@ export function compareRestaurants(
       reservation: full.reservation,
       booking: full.booking,
       closed: full.closed,
-      review_headline: (full.review as { headline: string } | null)?.headline ?? null,
+      review_headline:
+        (full.review as { headline: string | null; summary: string | null } | null)?.headline ??
+        truncate((full.review as { summary: string | null } | null)?.summary ?? null, 160) ??
+        null,
       guide_appearances: (full.guide_appearances as unknown[]).length,
     };
   });
@@ -621,7 +700,8 @@ export function findGuides(
   db: Database,
   city: string,
   query: string | undefined,
-  limit = 5
+  limit = 5,
+  includeEntries = true
 ): Record<string, unknown>[] {
   requireCity(db, city);
   const params: unknown[] = [city];
@@ -639,6 +719,9 @@ export function findGuides(
     )
     .all(...params, limit) as Record<string, unknown>[];
   return guides.map((g) => {
+    // Entries-off mode: guide metadata only, for when the caller wants titles
+    // without pulling every blurb.
+    if (!includeEntries) return { ...g, entries: [] };
     const entries = db
       .prepare(
         `SELECT ge.position, ge.entry_name, ge.blurb,

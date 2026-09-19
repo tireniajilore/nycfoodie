@@ -243,7 +243,7 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
     "get_restaurant",
     {
       description:
-        "Get the full picture for one restaurant in one call: Infatuation rating (0–10), price tier, address, reservation link, booking intel, review summary, tags and every guide it appears in. Use when the user names a specific restaurant. Full review prose is opt-in via include_prose (default: headline and summary only).",
+        "Get the full picture for one restaurant in one call: Infatuation rating (0–10), price tier, address, reservation link, booking intel, review summary, tags and every guide it appears in. Use when the user names a specific restaurant. Full review prose is opt-in via include_prose (default: headline and summary only). review.headline is the source's actual headline when one exists, otherwise null — use review.summary for the descriptive text.",
       annotations: READ_ONLY,
       inputSchema: {
         id: z.string().describe("Canonical restaurant id, or a name to resolve"),
@@ -287,15 +287,21 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
     "find_guides",
     {
       description:
-        "Find curated editorial guides (ranked lists) matching a theme, e.g. 'best ramen'. Returns each guide with its ranked entries, blurbs and linked restaurants. Use when the user wants the editorial lists themselves rather than individual restaurant picks.",
+        "Find curated editorial guides (ranked lists) matching a theme, e.g. 'best ramen'. Returns each guide with its ranked entries, blurbs and linked restaurants. Use when the user wants the editorial lists themselves rather than individual restaurant picks. Set include_entries=false to list guide titles and metadata without pulling every entry blurb.",
       annotations: READ_ONLY,
       inputSchema: {
         city: cityParam,
         query: z.string().optional().describe("Theme, e.g. 'best ramen', 'date night'"),
         limit: limitParam,
+        include_entries: z
+          .boolean()
+          .optional()
+          .describe("Set false to return guide metadata without the ranked entry blurbs (default true)"),
       },
     },
-    logged("find_guides", async ({ city, query, limit }) => json(findGuides(db, city, query, limit ?? 5)))
+    logged("find_guides", async ({ city, query, limit, include_entries }) =>
+      json(findGuides(db, city, query, limit ?? 5, include_entries ?? true))
+    )
   );
 
   server.registerTool(

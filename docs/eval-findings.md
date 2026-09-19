@@ -183,3 +183,59 @@ Verified locally against nycfoodie.db; verified live on production 2026-09-19:
 - find_similar La Bastide -> French venues, similarity 3, no NY Dosas
 - geo lat+lng without radius -> distance_km returned (5 km default)
 - card booking shape is {policy, notes} live.
+
+## Round 4 — 2026-09-19 23:04:15Z — get_restaurant — 2/5 (id 00738b50)
+14 calls. Raw: goals/nycfoodie-restaurant-data-product/hidden_files/feedback-round4.txt.
+Fixed confirmed: booking object shape consistent across get/search/top_rated.
+Bugs:
+1. CRITICAL: get_restaurant('Atla') closed:false, but guide "NYC's Most Exciting
+   Fall Restaurant Openings" (2026-09-08) says Atla closed earlier this year,
+   Bar Cosme taking its Noho space. Same guide flags Sam's (closed 2025),
+   Wizard Hat (shut 2024), Genesis House (pivoting). Editorial layer is fresher
+   than the closed flag; suggest audit of closure-language blurbs vs flag.
+   Evaluator notes include_closed=true seemed to change nothing -> very little
+   marked closed at all. guide_consensus top 50 all is_closed=0 (weak evidence).
+2. neighborhood='Noho' returns Fish Cheeks (Williamsburg) because its review
+   headline mentions "the Noho original". Reproduces in search + top_rated
+   (shared filter logic). False positives now, after Round 3 fixed false
+   negatives (L'industrie/Little Italy). Casing fine ('Noho' vs 'NOHO').
+3. find_guides has no entries-off mode: 73 blurbs for 3 guides with no query.
+   Suggest include_entries:false mirroring include_prose.
+4. review_headline conflates headline and summary: Atla headline == summary
+   byte-identical; Il Buco, Torien also descriptive sentences. Opposite of
+   LaRina's null headline (Round 2/3).
+5. NULL restaurant_id guide entries persist: black & white cookies guide pos 5,
+   fall openings pos 34. (Round 1 carryover.)
+Pattern note: rounds 1-3 were API-logic (padding, dropped params, empty vs
+error); round 4 is structured-vs-editorial disagreement -> data-pipeline
+problem, needs a different fix.
+
+## Round 4 resolutions — 2026-09-19 (commit pending)
+1. CLOSED FLAG vs EDITORIAL: audit of 182 blurbs with closure language.
+   Marked closed (migration 011, evidence in comments): Atla (fall openings
+   guide 2026-09-08: "closed earlier this year", Bar Cosme taking the space),
+   La Taq (closed 2011), 232 Bleecker ("now-closed"). Deliberately not marked:
+   Sam's Cobble Hill (closed 2025 but reborn Sept 2026), Angel's Share
+   (original room closed, popup operating), Wizard Hat (comeback pending),
+   Babbo (renovations), Dante (reopened), Boulud UWS trio (unnamed,
+   unresolvable), and 8 venues with no DB row at all. Ugly Baby needed no
+   change — its listing already carries the new 364 Grand St Williamsburg
+   address (reopened Sept 2026 per bkmag). Closed venues: 5 -> 8.
+2. FISH CHEEKS/NOHO: evaluator's mechanism was wrong — the filter is
+   tag-based, never prose-based. Fish Cheeks genuinely has an open NOHO-tagged
+   listing (original location) plus Williamsburg; both marked Open. The match
+   is legitimate; the card just didn't explain it. Fix: cards now carry
+   matched_neighborhood when a neighbourhood filter is active (Fish Cheeks ->
+   NOHO). Also: tags on closed listings no longer satisfy the filter unless
+   include_closed is set.
+3. FIND_GUIDES: new include_entries=false parameter (default true); returns
+   guide metadata with entry_count and entries: [].
+4. HEADLINE: detail review.headline is now the real headline or null (a
+   stored headline byte-identical to the summary, e.g. Atla, is treated as
+   absent). Cards and comparisons keep the truncated-summary fallback so no
+   display line goes blank (Round 2/3 fix stands). Only 328/1837 reviews have
+   a distinct headline — the rest is data coverage, not code.
+5. ORPHANED GUIDE ENTRIES: 1,912/12,419 (15%), ALL with entry_name NULL —
+   blurb-only. The cited examples' venues (William Greenberg, Genesis House)
+   have no restaurant row at all, so there is nothing to link to. Needs a
+   crawler entity-linking pass (backlog, not a code fix).
