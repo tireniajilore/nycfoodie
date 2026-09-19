@@ -145,6 +145,7 @@ interface CardRow {
   longitude: number | null;
   is_closed: number | null;
   booking_policy: string | null;
+  reservation_url: string | null;
   cuisines: string | null;
   neighborhoods: string | null;
   guide_count: number;
@@ -155,7 +156,7 @@ function buildWhere(f: Filters, params: unknown[]): string {
   const conds: string[] = ["r.city_slug = ?"];
   params.push(f.city);
   if (!f.includeClosed) conds.push("(pl.is_closed IS NULL OR pl.is_closed = 0)");
-  if (f.minRating !== undefined) {
+  if (f.minRating) {
     conds.push("pl.rating >= ?");
     params.push(f.minRating);
   }
@@ -164,11 +165,14 @@ function buildWhere(f: Filters, params: unknown[]): string {
     params.push(f.priceTier);
   }
   const tagFilter = (kind: string, value: string) => {
+    // Hyphens act as wildcards: 'date-night' matches 'Date Nights',
+    // 'Bedford-Stuyvesant' still matches literally.
+    const pattern = `%${likeEscape(value).replace(/-/g, "%")}%`;
     conds.push(
       `EXISTS (SELECT 1 FROM listing_tags lt JOIN tags t ON t.id = lt.tag_id
         WHERE lt.source_listing_id = pl.id AND t.kind = ? AND t.label LIKE ? ESCAPE '\\')`
     );
-    params.push(kind, `%${likeEscape(value)}%`);
+    params.push(kind, pattern);
   };
   if (f.cuisine) tagFilter("cuisine", f.cuisine);
   if (f.neighborhood) {
@@ -187,7 +191,8 @@ function buildWhere(f: Filters, params: unknown[]): string {
   }
   if (f.occasion) tagFilter("occasion", f.occasion);
   if (f.query) {
-    for (const tok of f.query.split(/\s+/).filter(Boolean)) {
+    // Hyphens are token separators: 'date-night Italian' -> date, night, Italian.
+    for (const tok of f.query.split(/[\s-]+/).filter(Boolean)) {
       conds.push(
         `(r.name LIKE ? ESCAPE '\\' OR pl.name LIKE ? ESCAPE '\\'
           OR EXISTS (SELECT 1 FROM listing_tags lt JOIN tags t ON t.id = lt.tag_id
@@ -214,6 +219,7 @@ const CARD_SELECT = `
   SELECT r.id, r.name,
     pl.rating, pl.price_tier, pl.price_label, pl.locality,
     pl.address_line1, pl.latitude, pl.longitude, pl.is_closed, pl.booking_policy,
+    pl.reservation_url,
     (SELECT GROUP_CONCAT(t.label, '|') FROM listing_tags lt JOIN tags t ON t.id = lt.tag_id
       WHERE lt.source_listing_id = pl.id AND t.kind = 'cuisine') AS cuisines,
     (SELECT GROUP_CONCAT(t.label, '|') FROM listing_tags lt JOIN tags t ON t.id = lt.tag_id
@@ -232,13 +238,14 @@ function toCard(row: CardRow, distanceKm?: number): Record<string, unknown> {
     rating: row.rating,
     price_tier: row.price_tier,
     price_label: row.price_label,
-    neighborhood: row.neighborhoods?.split("|")[0] ?? row.locality,
-    cuisines: row.cuisines?.split("|") ?? [],
+    neighborhood: row.neighborhoods?.split("|").find((s) => s.trim()) ?? row.locality,
+    cuisines: row.cuisines?.split("|").filter((s) => s.trim()) ?? [],
     address: row.address_line1,
     guide_appearances: row.guide_count,
+    closed: row.is_closed === 1,
   };
-  if (row.booking_policy) card.booking = row.booking_policy;
-  if (row.is_closed === 1) card.closed = true;
+  // A reservation link means booking is possible even without a stated policy.
+  card.booking = row.booking_policy ?? (row.reservation_url ? "reservations-available" : null);
   if (row.review_headline) card.review_headline = row.review_headline;
   if (distanceKm !== undefined) card.distance_km = Math.round(distanceKm * 10) / 10;
   return card;
@@ -279,7 +286,78 @@ export function searchRestaurants(
   return cards.map((c) => c.card);
 }
 
-/** Resolve an id or a name to a canonical restaurant. */
+/** Classic edit distance for typo-tolerant name resolution. */
+function levenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (!m) return n;
+  if (!n) return m;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(
+        prev[j] + 1,
+        cur[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+interface ScoredName {
+  id: string;
+  name: string;
+  score: number;
+}
+
+/**
+ * Rank all restaurant names against a query: exact, prefix and word-boundary
+ * matches first (negative scores), then by edit distance. "Sema" scores
+ * Semma (distance 1) ahead of Houseman (mere substring).
+ */
+function rankedNames(db: Database, city: string, query: string): ScoredName[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const rows = db
+    .prepare("SELECT id, name FROM restaurants WHERE city_slug = ?")
+    .all(city) as { id: string; name: string }[];
+  const wordRe = new RegExp(`\\b${escapeRegExp(q)}`);
+  return rows
+    .map((r) => {
+      const n = r.name.toLowerCase();
+      const score =
+        n === q
+          ? -1000
+          : n.startsWith(q)
+            ? -500 + (n.length - q.length)
+            : wordRe.test(n)
+              ? -200 + (n.length - q.length)
+              : levenshtein(q, n);
+      return { id: r.id, name: r.name, score };
+    })
+    .sort((a, b) => a.score - b.score || a.name.localeCompare(b.name));
+}
+
+/** Did-you-mean candidates for a name that didn't resolve. */
+export function suggestRestaurants(
+  db: Database,
+  city: string,
+  name: string,
+  limit = 3
+): { id: string; name: string }[] {
+  return rankedNames(db, city, name)
+    .slice(0, limit)
+    .map(({ id, name }) => ({ id, name }));
+}
+
+/** Resolve an id or a name to a canonical restaurant (typo-tolerant). */
 export function resolveRestaurant(
   db: Database,
   city: string,
@@ -292,13 +370,13 @@ export function resolveRestaurant(
     )
     .get(city, idOrName, idOrName) as { id: string; name: string } | undefined;
   if (exact) return exact;
-  return db
-    .prepare(
-      `SELECT id, name FROM restaurants
-       WHERE city_slug = ? AND name LIKE ? ESCAPE '\\'
-       ORDER BY length(name) LIMIT 1`
-    )
-    .get(city, `%${likeEscape(idOrName)}%`) as { id: string; name: string } | undefined ?? null;
+  const [best] = rankedNames(db, city, idOrName);
+  if (!best) return null;
+  // Accept clear prefix/word matches outright; otherwise require a small
+  // edit distance so "Sema" -> Semma but gibberish stays unresolved.
+  if (best.score < 0) return { id: best.id, name: best.name };
+  const threshold = Math.max(2, Math.floor(idOrName.trim().length / 3));
+  return best.score <= threshold ? { id: best.id, name: best.name } : null;
 }
 
 export function getRestaurant(
@@ -338,7 +416,10 @@ export function getRestaurant(
     )
     .all(r.id) as { kind: string; label: string }[];
   const grouped: Record<string, string[]> = {};
-  for (const t of tags) (grouped[t.kind] ??= []).push(t.label);
+  for (const t of tags) {
+    if (!t.label.trim()) continue; // safety net: skip empty-label tags
+    (grouped[t.kind] ??= []).push(t.label);
+  }
   const guides = db
     .prepare(
       `SELECT g.title, g.url, ge.position, ge.entry_name, ge.blurb FROM guide_entries ge
@@ -376,10 +457,14 @@ export function getRestaurant(
     reservation: row.reservation_url
       ? { url: row.reservation_url, platform: row.reservation_platform }
       : null,
-    booking: row.booking_policy
-      ? { policy: row.booking_policy, notes: row.wait_notes }
-      : null,
-    closed: row.is_closed === 1 ? { status: row.closed_status ?? true } : false,
+    booking:
+      row.booking_policy || row.reservation_url
+        ? {
+            policy: (row.booking_policy as string | null) ?? "reservations-available",
+            notes: row.wait_notes,
+          }
+        : null,
+    closed: row.is_closed === 1,
     source_url: row.source_url,
     review: row.review_title ? review : null,
     tags: grouped,
@@ -395,7 +480,12 @@ export function compareRestaurants(
   requireCity(db, city);
   return idsOrNames.map((s) => {
     const r = resolveRestaurant(db, city, s);
-    if (!r) return { query: s, found: false };
+    if (!r)
+      return {
+        query: s,
+        found: false,
+        suggestions: suggestRestaurants(db, city, s).map((x) => x.name),
+      };
     const full = getRestaurant(db, city, r.id, false)!;
     return {
       query: s,
@@ -580,7 +670,11 @@ export function guideConsensus(
   };
   return (rows as ConsensusRow[])
     .filter((row) => !row.is_closed)
-    .map((row) => ({ ...row, guide_count: countById.get(row.id) }))
+    .map((row) => ({
+      ...row,
+      guide_count: countById.get(row.id),
+      neighborhoods: ((row.neighborhoods as string | null)?.split("|").filter((s) => s.trim()) ?? []),
+    }))
     .sort(
       (a, b) =>
         (b.guide_count ?? 0) - (a.guide_count ?? 0) || (b.rating ?? 0) - (a.rating ?? 0)

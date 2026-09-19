@@ -70,3 +70,44 @@ wrong; entry 3 + the hyphen and min_rating findings from entry 2 are accurate.
 - **Feedback read-back.** `submit_feedback` is write-only; there is no way to
   audit or retrieve what was logged. Proposal: admin-only HTTP endpoint behind
   a token (NOT an MCP tool — feedback must not be visible to all agents).
+
+## Fixed 2026-09-19 (MEDIUM + LOW sweep)
+
+1. **Hyphens are token separators now.** Free-text queries split on
+   `[\s-]+`, so `query='date-night Italian'` works (returns Via Carota et al).
+   Structured tag filters (cuisine/neighborhood/occasion) treat `-` as a
+   LIKE wildcard: `occasion='date-night'` matches 'Date Nights',
+   `neighborhood='Bedford-Stuyvesant'` still matches literally.
+2. **`min_rating=0` is a no-op.** Falsy check instead of `!== undefined`;
+   null-rated venues (e.g. Shuya) are no longer dropped by an explicit 0.
+3. **Occasion vocabulary exposed.** The `occasion` param description now lists
+   all allowed values (Date Nights, Happy Hours, Pre-Theater, See & Be Seen,
+   Serious Takeout Operation, Unique Dining Experiences, Wasting Your Time &
+   Money). 'group dinner' has no equivalent in the data — documented as such.
+4. **Stale reservation dates stripped.** Migration 007 removes crawl-time
+   `date=`/`default_date=` params from 216 reservation URLs (LaRina,
+   L'Artusi, Lilia, Thai Diner, Tatiana, The Grill, SevenRooms venues…).
+   Dockerfile now also copies `db/migrations` into the image so migrations
+   run against the live volume DB on boot.
+5. **Booking fallback.** When `reservation.url` exists but no booking policy
+   is stated, `booking` is `'reservations-available'` (search) /
+   `{policy:'reservations-available'}` (`get_restaurant`) instead of null.
+6. **Closed flag: not a bug.** Verified against the originally deployed code:
+   `include_closed=true` results already carried `closed:true` for all five
+   known-closed venues. Made it always-present (`closed:false` when open)
+   for consistency.
+7. **Empty tag strings fixed at the root.** The crawler's `tagFromPath`
+   created one empty-label occasion tag per listing (54 rows, 12,025 links);
+   now skips blank labels. Migration 007 deletes the junk rows. Read-time
+   filtering added as a safety net.
+8. **Schema drift reduced.** `closed` is now a boolean on every tool
+   (`get_restaurant` dropped the `{status}` wrapper — the underlying
+   `closed_status` data was junk, always 'Open'). `guide_consensus`
+   `neighborhoods` is now an array, not pipe-delimited. Search cards always
+   carry `closed` and `booking` (possibly null).
+9. **Typo-tolerant name resolution.** `resolveRestaurant` now ranks all names
+   by exact/prefix/word-boundary match then Levenshtein distance: 'Sema' →
+   Semma (was: Houseman). `found:false` responses include `suggestions`
+   (top-3 names) on `get_restaurant`, `find_similar`, `compare_restaurants`.
+10. **Empty query documented.** `search_restaurants` description now states
+    that no query/filters returns the highest-rated venues.

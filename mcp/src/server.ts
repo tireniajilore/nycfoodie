@@ -18,6 +18,7 @@ import {
   getRestaurant,
   guideConsensus,
   searchRestaurants,
+  suggestRestaurants,
   topRated,
   type Filters,
 } from "./queries.js";
@@ -134,7 +135,12 @@ export function createMcpServer(): McpServer {
   const filterShape = {
     cuisine: z.string().optional().describe("e.g. 'Italian', 'ramen'"),
     neighborhood: z.string().optional().describe("e.g. 'West Village', or a borough like 'Brooklyn'"),
-    occasion: z.string().optional().describe("e.g. 'date night', 'group dinner'"),
+    occasion: z
+      .string()
+      .optional()
+      .describe(
+        "Occasion tag. Allowed: 'Date Nights', 'Happy Hours', 'Pre-Theater', 'See & Be Seen', 'Serious Takeout Operation', 'Unique Dining Experiences', 'Wasting Your Time & Money'. Hyphens and spaces are flexible ('date-night' works)."
+      ),
     min_rating: z.number().min(0).max(10).optional().describe("Minimum Infatuation rating"),
     price_tier: z.number().int().min(1).max(4).optional().describe("1 ($) to 4 ($$$$)"),
     include_closed: z
@@ -150,7 +156,7 @@ export function createMcpServer(): McpServer {
     "search_restaurants",
     {
       description:
-        "Search restaurants by free text, cuisine, neighbourhood, occasion or price, optionally near a point. Use when the user describes what they want (e.g. 'Italian date night in the West Village', 'ramen near me') rather than naming a specific restaurant. Returns compact matches with Infatuation rating (0–10), price tier, address and tags. Known-closed venues are excluded by default.",
+        "Search restaurants by free text, cuisine, neighbourhood, occasion or price, optionally near a point. Use when the user describes what they want (e.g. 'Italian date night in the West Village', 'ramen near me') rather than naming a specific restaurant. Returns compact matches with Infatuation rating (0–10), price tier, address and tags. Known-closed venues are excluded by default. With no query or filters, returns the highest-rated venues.",
       annotations: READ_ONLY,
       inputSchema: {
         query: z.string().optional().describe("Free text, e.g. 'date-night Italian'"),
@@ -192,7 +198,12 @@ export function createMcpServer(): McpServer {
     },
     logged("get_restaurant", async ({ id, city, include_prose }) => {
       const r = getRestaurant(db, city, id, include_prose ?? false);
-      return r ? json(r) : json({ found: false, query: id });
+      if (r) return json(r);
+      return json({
+        found: false,
+        query: id,
+        suggestions: suggestRestaurants(db, city, id).map((s) => s.name),
+      });
     })
   );
 
@@ -243,7 +254,12 @@ export function createMcpServer(): McpServer {
     },
     logged("find_similar", async ({ id, city, limit }) => {
       const r = findSimilar(db, city, id, limit ?? 10);
-      return r ? json(r) : json({ found: false, query: id });
+      if (r) return json(r);
+      return json({
+        found: false,
+        query: id,
+        suggestions: suggestRestaurants(db, city, id).map((s) => s.name),
+      });
     })
   );
 

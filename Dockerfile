@@ -29,6 +29,7 @@ COPY --from=build /app/mcp/package.json ./mcp/
 COPY --from=build /app/crawler/package.json ./crawler/
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/db/dist ./db/dist
+COPY --from=build /app/db/migrations ./db/migrations
 COPY --from=build /app/mcp/dist ./mcp/dist
 # database ships with the image
 COPY nycfoodie.db ./nycfoodie.db

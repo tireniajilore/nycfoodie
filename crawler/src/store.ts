@@ -120,7 +120,9 @@ function tagFromPath(
 ): void {
   const slug = pathSlug(attrPath) ?? (label ? slugify(label) : null);
   if (!slug) return;
-  tagListing(listingId, upsertTag(citySlug, kind, slug, label ?? slug));
+  const cleanLabel = label?.trim() || slug;
+  if (!cleanLabel) return;
+  tagListing(listingId, upsertTag(citySlug, kind, slug, cleanLabel));
 }
 
 /** Match-or-create the canonical restaurant row. MVP rule: same city + normalised name. */
