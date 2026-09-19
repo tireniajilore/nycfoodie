@@ -88,6 +88,49 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
   }
 }
 
+const LANDING_HTML = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NYCfoodie — MCP server</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; max-width: 640px; margin: 3rem auto; padding: 0 1.5rem; line-height: 1.6; color: #1a1a1a; }
+  code { background: #f3f3f3; padding: 0.15em 0.4em; border-radius: 4px; font-size: 0.9em; }
+  h1 { font-size: 1.8rem; margin-bottom: 0.25rem; }
+  .tagline { color: #555; margin-top: 0; }
+  ul.tools li { margin-bottom: 0.3rem; }
+  footer { margin-top: 2.5rem; color: #888; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<h1>NYCfoodie</h1>
+<p class="tagline">The data layer for restaurant taste — structured editorial restaurant recommendations over MCP.</p>
+<h2>Endpoints</h2>
+<ul>
+<li><code>POST /mcp</code> — Streamable HTTP MCP endpoint (JSON-RPC)</li>
+<li><code>GET /healthz</code> — health check</li>
+</ul>
+<h2>Tools</h2>
+<ul class="tools">
+<li><code>search_restaurants</code> — full-text search across venues, cuisines, neighbourhoods</li>
+<li><code>get_restaurant</code> — full detail: reviews, ratings, booking intel</li>
+<li><code>compare_restaurants</code> — side-by-side structured comparison</li>
+<li><code>find_guides</code> — search editorial guides</li>
+<li><code>find_similar</code> — venues similar to a given restaurant</li>
+<li><code>guide_consensus</code> — cross-guide consensus on a venue</li>
+<li><code>top_rated</code> — highest-rated venues by area or cuisine</li>
+<li><code>submit_feedback</code> — rate a result</li>
+</ul>
+<footer>5,767 NYC venues · 1,841 numeric ratings · 1,837 full editorial reviews</footer>
+</body>
+</html>`;
+
+function handleLanding(res: ServerResponse): void {
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+  res.end(LANDING_HTML);
+}
+
 const httpServer = createServer((req, res) => {
   cors(res);
   const ip = req.socket.remoteAddress ?? "unknown";
@@ -105,6 +148,10 @@ const httpServer = createServer((req, res) => {
   if (url.pathname === "/healthz") {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ ok: true }));
+    return;
+  }
+  if (url.pathname === "/" && req.method === "GET") {
+    handleLanding(res);
     return;
   }
   if (url.pathname === "/mcp" && (req.method === "POST" || req.method === "GET")) {

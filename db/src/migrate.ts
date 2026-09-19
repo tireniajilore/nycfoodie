@@ -3,7 +3,7 @@
 //
 // CLI: node dist/migrate.js [db-path]   (defaults to ./nycfoodie.db)
 
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { openDb, closeDb } from "./index.js";
@@ -23,9 +23,11 @@ export function migrate(dbPath: string): string[] {
       (row) => row.version
     )
   );
-  const files = readdirSync(MIGRATIONS_DIR)
-    .filter((f) => f.endsWith(".sql"))
-    .sort();
+  const files = existsSync(MIGRATIONS_DIR)
+    ? readdirSync(MIGRATIONS_DIR)
+        .filter((f) => f.endsWith(".sql"))
+        .sort()
+    : [];
   const insert = db.prepare("INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)");
   const newlyApplied: string[] = [];
   for (const file of files) {
