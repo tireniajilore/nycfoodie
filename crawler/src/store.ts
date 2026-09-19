@@ -399,6 +399,81 @@ export function recordGoogleCheckedNoMatch(restaurantId: number, checkedAt: stri
     .run(checkedAt, restaurantId);
 }
 
+/** Upsert a guide; returns its id. */
+export function upsertGuide(
+  citySlug: string,
+  guide: {
+    sourceKey: string;
+    title: string;
+    url: string;
+    summary: string | null;
+    publishedAt: string | null;
+    updatedAt: string | null;
+  }
+): string {
+  const db = getDb();
+  const existing = db
+    .prepare(`SELECT id FROM guides WHERE source_slug = ? AND source_key = ?`)
+    .get(SOURCE_SLUG, guide.sourceKey) as { id: string } | undefined;
+  const id = existing?.id ?? randomUUID();
+  db.prepare(
+    `INSERT INTO guides (id, source_slug, city_slug, source_key, title, url, summary,
+                         published_at, updated_at, last_crawled_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (source_slug, source_key) DO UPDATE SET
+       title = excluded.title, url = excluded.url, summary = excluded.summary,
+       published_at = excluded.published_at, updated_at = excluded.updated_at,
+       last_crawled_at = excluded.last_crawled_at`
+  ).run(
+    id,
+    SOURCE_SLUG,
+    citySlug,
+    guide.sourceKey,
+    guide.title,
+    guide.url,
+    guide.summary,
+    guide.publishedAt,
+    guide.updatedAt,
+    now()
+  );
+  return id;
+}
+
+/**
+ * Upsert one ranked guide entry. Links to the listing through the review
+ * slug (source_listings.source_key). Entries that resolve to no known
+ * listing keep their position and blurb but stay unlinked (NULL) — never
+ * guessed, never dropped (dropping would corrupt the ranking).
+ */
+export function upsertGuideEntry(
+  guideId: string,
+  entry: { position: number; sourceKey: string; blurb: string | null }
+): { linked: boolean } {
+  const db = getDb();
+  const listing = db
+    .prepare(`SELECT id FROM source_listings WHERE source_slug = ? AND source_key = ?`)
+    .get(SOURCE_SLUG, entry.sourceKey) as { id: string } | undefined;
+  const existing = db
+    .prepare(`SELECT id FROM guide_entries WHERE guide_id = ? AND position = ?`)
+    .get(guideId, entry.position) as { id: string } | undefined;
+  const id = existing?.id ?? randomUUID();
+  // A re-crawl may resolve a previously unlinked entry; the old
+  // (guide_id, source_listing_id) unique row is replaced by upserting on
+  // (guide_id, position), deleting any conflicting listing-link row first.
+  db.prepare(
+    `DELETE FROM guide_entries
+     WHERE guide_id = ? AND source_listing_id IS NOT NULL
+       AND source_listing_id = ? AND position != ?`
+  ).run(guideId, listing?.id ?? null, entry.position);
+  db.prepare(
+    `INSERT INTO guide_entries (id, guide_id, source_listing_id, position, blurb)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT (guide_id, position) DO UPDATE SET
+       source_listing_id = excluded.source_listing_id, blurb = excluded.blurb`
+  ).run(id, guideId, listing?.id ?? null, entry.position, entry.blurb);
+  return { linked: !!listing };
+}
+
 /** Candidate venues for Google verification: have coordinates, not checked recently. */
 export function googleVerifyCandidates(
   citySlug: string,

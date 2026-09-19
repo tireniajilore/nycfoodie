@@ -136,16 +136,20 @@ function harvestDishes(links: unknown): EnrichedDish[] {
 let cachedBuildId: string | null = null;
 
 /** Scrape the current Next.js buildId from a page's HTML (cached per run). */
-export async function fetchBuildId(city: string, slug: string): Promise<string> {
+export async function fetchBuildId(
+  city: string,
+  slug: string,
+  kind: "reviews" | "guides" = "reviews"
+): Promise<string> {
   if (cachedBuildId) return cachedBuildId;
-  const res = await fetch(`${INFATUATION_BASE}/${city}/reviews/${slug}`, {
+  const res = await fetch(`${INFATUATION_BASE}/${city}/${kind}/${slug}`, {
     headers: { "user-agent": USER_AGENT, accept: "text/html" },
     signal: AbortSignal.timeout(20_000),
   });
-  if (!res.ok) throw new Error(`Review HTML fetch failed: HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`Page HTML fetch failed: HTTP ${res.status}`);
   const html = await res.text();
   const m = html.match(/"buildId":"([^"]+)"/);
-  if (!m) throw new Error("Could not find buildId in review HTML");
+  if (!m) throw new Error("Could not find buildId in page HTML");
   cachedBuildId = m[1];
   return cachedBuildId;
 }
@@ -254,3 +258,120 @@ export async function enrichReview(
 }
 
 export { slugify };
+
+/* ------------------------------------------------------------------ */
+/* Guides                                                              */
+/* ------------------------------------------------------------------ */
+
+export interface GuideEntryData {
+  rank: number;
+  sourceKey: string; // review slug name, links to source_listings.source_key
+  headline: string | null;
+  blurb: string | null; // Caption rich text as Markdown
+}
+
+export interface GuideData {
+  sourceKey: string; // guide slug
+  title: string;
+  description: string | null;
+  publishedAt: string | null;
+  updatedAt: string | null;
+  entries: GuideEntryData[];
+}
+
+/** Fetch the raw _next/data JSON for a guide page. */
+export async function fetchGuidePageData(
+  city: string,
+  slug: string,
+  buildId?: string
+): Promise<ApolloState> {
+  const id = buildId ?? (await fetchBuildId(city, slug, "guides"));
+  const url = `${INFATUATION_BASE}/_next/data/${id}/${city}/guides/${slug}.json`;
+  const res = await fetch(url, {
+    headers: { "user-agent": USER_AGENT, accept: "application/json" },
+    signal: AbortSignal.timeout(20_000),
+  });
+  if (res.status === 404 && !buildId) {
+    cachedBuildId = null;
+    return fetchGuidePageData(city, slug, await fetchBuildId(city, slug, "guides"));
+  }
+  if (!res.ok) throw new Error(`Guide page data fetch failed: HTTP ${res.status} for ${url}`);
+  const json = (await res.json()) as { pageProps?: { initialApolloState?: ApolloState } };
+  const state = json.pageProps?.initialApolloState;
+  if (!state) throw new Error("Guide page data missing initialApolloState");
+  return state;
+}
+
+/**
+ * Extract a guide: metadata plus ordered Caption entries.
+ * Rank is the 1-based position among Captions that resolve to a review.
+ * Verified live 2026-09-19 against /new-york/guides/best-birthday-restaurants-nyc.
+ */
+export function extractGuide(state: ApolloState, guideSlug: string): GuideData | null {
+  const root = state["ROOT_QUERY"] as Record<string, unknown> | undefined;
+  if (!root) return null;
+  const colKey = Object.keys(root).find((k) => k.startsWith("postGuideCollection"));
+  if (!colKey) return null;
+  const col = deref(state, root[colKey]) as { items?: unknown[] } | null;
+  const guide = deref(state, col?.items?.[0]) as Record<string, unknown> | null;
+  if (!guide) return null;
+
+  const sys = deref(state, guide["sys"]) as { firstPublishedAt?: string; publishedAt?: string } | null;
+  const bodyKey = Object.keys(guide).find((k) => k.startsWith("contentV2BodyCollection"));
+  const body = (bodyKey ? deref(state, guide[bodyKey]) : null) as { items?: unknown[] } | null;
+
+  const entries: GuideEntryData[] = [];
+  for (const item of body?.items ?? []) {
+    const cap = deref(state, item) as Record<string, unknown> | null;
+    if (!cap || cap["__typename"] !== "Caption") continue;
+    const review = deref(state, cap["review"]) as Record<string, unknown> | null;
+    const slug = deref(state, review?.["slug"]) as { name?: string } | null;
+    const name = slug?.name;
+    if (!name) continue; // caption without a linked review: no entry
+    const content = cap["content"] as { json?: unknown } | undefined;
+    entries.push({
+      rank: entries.length + 1,
+      sourceKey: name,
+      headline: typeof cap["headline"] === "string" ? (cap["headline"] as string) : null,
+      blurb: content?.json ? richTextToMarkdown(content.json) : null,
+    });
+  }
+
+  return {
+    sourceKey: guideSlug,
+    title: typeof guide["title"] === "string" ? (guide["title"] as string) : guideSlug,
+    description: typeof guide["preview"] === "string" ? (guide["preview"] as string) : null,
+    publishedAt:
+      sys?.firstPublishedAt ??
+      (typeof guide["publishDate"] === "string" ? (guide["publishDate"] as string) : null),
+    updatedAt: sys?.publishedAt ?? null,
+    entries,
+  };
+}
+
+/**
+ * Enumerate guide slugs for a city from the public sitemaps.
+ * Returns de-duplicated slugs in sitemap order.
+ */
+export async function listGuideSlugs(city: string): Promise<string[]> {
+  const seen = new Set<string>();
+  const slugs: string[] = [];
+  for (const sitemap of ["sitemap-1.xml", "sitemap-latest.xml"]) {
+    const res = await fetch(`${INFATUATION_BASE}/${sitemap}`, {
+      headers: { "user-agent": USER_AGENT },
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) continue;
+    const xml = await res.text();
+    const re = new RegExp(`https://www\\.theinfatuation\\.com/${city}/guides/([a-z0-9-]+)`, "g");
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(xml)) !== null) {
+      if (!seen.has(m[1])) {
+        seen.add(m[1]);
+        slugs.push(m[1]);
+      }
+    }
+    await sleep(1000);
+  }
+  return slugs;
+}

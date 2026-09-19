@@ -6,8 +6,13 @@
 // --dry-run (default) fetches live from the Infatuation GraphQL surface and
 // prints a summary without writing to the database.
 
-import { forEachSearchPage } from "./infatuation/graphql.js";
-import { enrichReview } from "./infatuation/pagedata.js";
+import { forEachSearchPage, POLITE_DELAY_MS } from "./infatuation/graphql.js";
+import {
+  enrichReview,
+  extractGuide,
+  fetchGuidePageData,
+  listGuideSlugs,
+} from "./infatuation/pagedata.js";
 import { verifyPlace, sleep as googleSleep, RECHECK_DAYS } from "./google/places.js";
 import {
   ensureCity,
@@ -17,6 +22,8 @@ import {
   recordCrawlState,
   recordGoogleCheckedNoMatch,
   recordGoogleVerification,
+  upsertGuide,
+  upsertGuideEntry,
   upsertReviewListing,
 } from "./store.js";
 import { closeDb } from "nycfoodie-db";
@@ -120,6 +127,9 @@ switch (cmd) {
   case "google-verify":
     await cmdGoogleVerify();
     break;
+  case "guides":
+    await cmdGuides();
+    break;
   case undefined:
   case "help":
   case "--help":
@@ -128,6 +138,7 @@ switch (cmd) {
 Usage:
   nycfoodie-crawl reviews --city new-york [--max-pages N] [--write] [--enrich] [--db PATH]
   nycfoodie-crawl google-verify --city new-york --limit N --db PATH
+  nycfoodie-crawl guides --city new-york [--limit N] [--write] [--db PATH]
 
 Options (reviews):
   --city       City slug (default: new-york)
@@ -139,11 +150,95 @@ Options (reviews):
 Options (google-verify):
   --limit      Max venues to check (default: 20). Highest-rated first.
   --db         SQLite path (default: ./nycfoodie.db)
-  Requires GOOGLE_PLACES_API_KEY in the environment.`);
+  Requires GOOGLE_PLACES_API_KEY in the environment.
+
+Options (guides):
+  --limit      Max guides to fetch (default: 3)
+  --write      Write to the database (default: dry run, no writes)
+  --db         SQLite path (default: ./nycfoodie.db)`);
     break;
   default:
     console.error(`Unknown command: ${cmd}. Run \`nycfoodie-crawl help\`.`);
     process.exit(1);
+}
+
+/** Crawl guides: enumerate slugs, fetch each guide's ranked entries, link to listings. */
+async function cmdGuides(): Promise<void> {
+  const dbPath = arg("db", "./nycfoodie.db")!;
+  const city = arg("city", "new-york")!;
+  const limit = Number(arg("limit", "3")!);
+  const write = process.argv.includes("--write");
+
+  console.log(`Fetching Infatuation guides for city=${city} (limit=${limit}, write=${write})…`);
+  const slugs = await listGuideSlugs(city);
+  console.log(`${slugs.length} guide slug(s) enumerated from sitemaps.`);
+
+  if (write) {
+    initStore(dbPath);
+    ensureCity(city, city === "new-york" ? "New York" : city);
+  }
+  const resumeSlug = write ? getCrawlCursor(city, "guides") : null;
+  if (resumeSlug === "DONE") {
+    console.log("Guide crawl already complete — nothing to do.");
+    if (write) closeDb();
+    return;
+  }
+  let startIdx = 0;
+  if (resumeSlug) {
+    const i = slugs.indexOf(resumeSlug);
+    if (i >= 0) {
+      startIdx = i + 1;
+      console.log(`Resuming after ${resumeSlug}…`);
+    }
+  }
+
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  let guides = 0;
+  let entries = 0;
+  let linked = 0;
+  const queue = slugs.slice(startIdx, startIdx + limit);
+  for (const slug of queue) {
+    await sleep(POLITE_DELAY_MS);
+    try {
+      const state = await fetchGuidePageData(city, slug);
+      const data = extractGuide(state, slug);
+      if (!data) {
+        console.error(`  ! ${slug}: no guide extracted`);
+        continue;
+      }
+      if (write) {
+        const guideId = upsertGuide(city, {
+          sourceKey: data.sourceKey,
+          title: data.title,
+          url: `https://www.theinfatuation.com/${city}/guides/${slug}`,
+          summary: data.description,
+          publishedAt: data.publishedAt,
+          updatedAt: data.updatedAt,
+        });
+        for (const e of data.entries) {
+          const r = upsertGuideEntry(guideId, {
+            position: e.rank,
+            sourceKey: e.sourceKey,
+            blurb: [e.headline, e.blurb].filter(Boolean).join("\n\n"),
+          });
+          entries++;
+          if (r.linked) linked++;
+        }
+        recordCrawlState(city, "guides", guides + 1, slug);
+      }
+      guides++;
+      console.log(`  ✓ ${slug}: "${data.title}" — ${data.entries.length} entries`);
+    } catch (e) {
+      console.error(`  ! ${slug}: ${(e as Error).message}`);
+    }
+  }
+  if (write) {
+    const finishedAll = startIdx + queue.length >= slugs.length;
+    recordCrawlState(city, "guides", guides, finishedAll ? "DONE" : (queue[queue.length - 1] ?? null));
+    closeDb();
+  }
+  console.log(`Done: ${guides} guide(s), ${entries} entries, ${linked} linked to listings.`);
+  if (!write) console.log("Dry run — nothing written to the database.");
 }
 
 /** Cross-check venues against Google Places business_status. Paid API — bounded by --limit. */
@@ -153,9 +248,9 @@ async function cmdGoogleVerify(): Promise<void> {
     console.error("GOOGLE_PLACES_API_KEY is not set. Aborting before spending anything.");
     process.exit(1);
   }
-  const dbPath = arg("--db") ?? "./nycfoodie.db";
-  const city = arg("--city") ?? "new-york";
-  const limit = Number(arg("--limit") ?? "20");
+  const dbPath = arg("db", "./nycfoodie.db")!;
+  const city = arg("city", "new-york")!;
+  const limit = Number(arg("limit", "20")!);
   initStore(dbPath);
   ensureCity(city, city === "new-york" ? "New York" : city);
 
