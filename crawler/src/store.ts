@@ -410,6 +410,29 @@ export function recordCrawlState(
     .run(SOURCE_SLUG, citySlug, collection, now(), lastCursor, itemCount, null);
 }
 
+/**
+ * Stamp the dataset vintage after a successful crawl write run. The API
+ * exposes this as data_as_of on every response so agents can caveat stale
+ * claims (e.g. closures). Creates dataset_meta for databases predating
+ * migration 013.
+ */
+export function stampDatasetBuiltAt(): void {
+  const db = getDb();
+  db.exec(
+    `CREATE TABLE IF NOT EXISTS dataset_meta (
+       key TEXT PRIMARY KEY,
+       value TEXT NOT NULL,
+       updated_at TEXT NOT NULL
+     )`
+  );
+  const ts = now();
+  db.prepare(
+    `INSERT INTO dataset_meta (key, value, updated_at)
+     VALUES ('built_at', ?, ?)
+     ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`
+  ).run(ts, ts);
+}
+
 export type { GooglePlaceMatch } from "./google/places.js";
 
 /** Write a Google Places verification result onto the canonical restaurant. */

@@ -25,6 +25,7 @@ import {
   initStore,
   recordCrawlState,
   recordGoogleCheckedNoMatch,
+  stampDatasetBuiltAt,
   recordGoogleVerification,
   upsertGuide,
   upsertGuideEntry,
@@ -116,6 +117,7 @@ async function cmdReviews(): Promise<void> {
 
   if (write) {
     recordCrawlState(city, "reviews", nodes, completed ? "DONE" : lastCursor);
+    stampDatasetBuiltAt();
     closeDb();
   }
   console.log(`Done: ${pages} page(s), ${nodes} review node(s), ${written} written.`);
@@ -249,6 +251,7 @@ async function cmdGuides(): Promise<void> {
   if (write) {
     const finishedAll = startIdx + queue.length >= slugs.length;
     recordCrawlState(city, "guides", guides, finishedAll ? "DONE" : (queue[queue.length - 1] ?? null));
+    stampDatasetBuiltAt();
     closeDb();
   }
   console.log(`Done: ${guides} guide(s), ${entries} entries, ${linked} linked to listings.`);
@@ -313,6 +316,7 @@ async function cmdEnrich(): Promise<void> {
 
   if (write) {
     recordCrawlState(city, "enrichment", ok, null);
+    stampDatasetBuiltAt();
   }
   closeDb();
   console.log(`Done: ${ok} enriched, ${failed} failed, ${dishes} dishes.`);

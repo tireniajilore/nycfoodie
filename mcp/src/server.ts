@@ -44,6 +44,21 @@ openDb(dbPath);
 const writeDb = getDb();
 const db = openReadDb(dbPath);
 
+/** Dataset vintage, exposed as data_as_of on every tool response so agents
+ *  can caveat stale claims (closures especially). Written by the crawler on
+ *  each build; backfilled from crawl timestamps by migration 013. */
+function readDataAsOf(): string | null {
+  try {
+    const row = db
+      .prepare("SELECT value FROM dataset_meta WHERE key = 'built_at'")
+      .get() as { value: string } | undefined;
+    return row?.value ?? null;
+  } catch {
+    return null;
+  }
+}
+const DATA_AS_OF = readDataAsOf();
+
 // Bounded retention for usage analytics: keep 180 days.
 try {
   const cutoff = new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString();
@@ -77,7 +92,24 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
     opts.clientIp != null ? hashClient(opts.clientIp, opts.userAgent ?? "") : null;
 
   function json(data: unknown) {
-    return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+    return {
+      content: [
+        { type: "text" as const, text: JSON.stringify(stampDataAsOf(data), null, 2) },
+      ],
+    };
+  }
+
+  /** Stamp the dataset vintage onto every response: top-level for objects,
+   *  per record for arrays so existing shapes stay backward-compatible. */
+  function stampDataAsOf(data: unknown): unknown {
+    if (DATA_AS_OF == null) return data;
+    if (Array.isArray(data))
+      return data.map((el) =>
+        el && typeof el === "object" ? { data_as_of: DATA_AS_OF, ...el } : el
+      );
+    if (data && typeof data === "object")
+      return { data_as_of: DATA_AS_OF, ...(data as Record<string, unknown>) };
+    return data;
   }
 
   /** Wrap a tool handler with call logging (timing, args, errors) plus a
@@ -243,7 +275,7 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
     "get_restaurant",
     {
       description:
-        "Get the full picture for one restaurant in one call: Infatuation rating (0–10), price tier, address, reservation link, booking intel, review summary, tags and every guide it appears in. Use when the user names a specific restaurant. Full review prose is opt-in via include_prose (default: headline and summary only). review.headline is the source's actual headline when one exists, otherwise null — use review.summary for the descriptive text. match_type is 'exact' when the id or name matched verbatim, 'fuzzy' when it was resolved from a partial/typo'd name — never present a fuzzy match as the venue the user named without saying so. booking is null when the source has no booking intel (not the same as walk-in-only); a reservation link alone never implies a booking policy.",
+        "Get the full picture for one restaurant in one call: Infatuation rating (0–10), price tier, address, reservation link, booking intel, review summary, tags and every guide it appears in. Use when the user names a specific restaurant. Full review prose is opt-in via include_prose (default: headline and summary only). review.headline is the source's actual headline when one exists, otherwise null — use review.summary for the descriptive text. match_type is 'exact' when the id or name matched verbatim, 'fuzzy' when it was resolved from a partial/typo'd name — never present a fuzzy match as the venue the user named without saying so. booking is null when the source has no booking intel (not the same as walk-in-only); a reservation link alone never implies a booking policy. data_as_of is the dataset vintage and crawled_at is when this venue was last crawled — caveat fast-decaying claims (closures especially) when these are old.",
       annotations: READ_ONLY,
       inputSchema: {
         id: z.string().describe("Canonical restaurant id, or a name to resolve"),

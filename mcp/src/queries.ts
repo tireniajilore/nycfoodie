@@ -313,6 +313,7 @@ interface CardRow {
   booking_policy: string | null;
   wait_notes: string | null;
   reservation_url: string | null;
+  last_crawled_at: string | null;
   cuisines: string | null;
   neighborhoods: string | null;
   guide_count: number;
@@ -410,7 +411,7 @@ const CARD_SELECT = `
   SELECT r.id, r.name,
     pl.rating, pl.price_tier, pl.price_label, pl.locality,
     pl.address_line1, pl.latitude, pl.longitude, pl.is_closed, pl.booking_policy,
-    pl.wait_notes, pl.reservation_url,
+    pl.wait_notes, pl.reservation_url, pl.last_crawled_at,
     (SELECT GROUP_CONCAT(t.label, '|') FROM listing_tags lt JOIN tags t ON t.id = lt.tag_id
       WHERE lt.source_listing_id = pl.id AND t.kind = 'cuisine') AS cuisines,
     (SELECT GROUP_CONCAT(t.label, '|') FROM listing_tags lt JOIN tags t ON t.id = lt.tag_id
@@ -443,6 +444,9 @@ function toCard(
     address: row.address_line1,
     guide_appearances: row.guide_count,
     closed: row.is_closed === 1,
+    // When this venue's data was last crawled — agents should caveat
+    // fast-decaying claims (closures especially) on stale values.
+    crawled_at: row.last_crawled_at,
   };
   // Present only when a neighbourhood filter is active: which of the venue's
   // neighbourhoods satisfied it. May differ from the canonical neighbourhood
@@ -646,7 +650,7 @@ export function getRestaurant(
         pl.rating, pl.price_tier, pl.price_label, pl.address_line1, pl.locality,
         pl.region, pl.postal_code, pl.latitude, pl.longitude, pl.phone, pl.website,
         pl.reservation_url, pl.reservation_platform, pl.booking_policy, pl.wait_notes,
-        pl.is_closed, pl.closed_status, pl.source_url,
+        pl.is_closed, pl.closed_status, pl.source_url, pl.last_crawled_at,
         rv.title AS review_title, rv.headline AS review_headline, rv.summary AS review_summary,
         rv.body_text AS review_body, rv.author AS review_author,
         rv.published_at AS review_published_at, rv.url AS review_url
@@ -709,6 +713,7 @@ export function getRestaurant(
     // How the query resolved: "exact" (id or name matched verbatim) or
     // "fuzzy" (prefix/fuzzy resolution, e.g. "Sema" -> Semma). Round 5: I1.
     match_type: matchType(db, city, idOrName),
+    crawled_at: row.last_crawled_at,
     rating: row.rating,
     price_tier: row.price_tier,
     price_label: row.price_label,
