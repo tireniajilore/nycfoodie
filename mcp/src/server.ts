@@ -8,6 +8,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { dirname, join } from "node:path";
 import { copyFileSync, existsSync } from "node:fs";
+import Database from "better-sqlite3";
 import { getDb, openDb, openReadDb } from "nycfoodie-db";
 import { migrate } from "nycfoodie-db/dist/migrate.js";
 import { z } from "zod";
@@ -34,6 +35,86 @@ if (!existsSync(dbPath) && seedPath !== dbPath && existsSync(seedPath)) {
   copyFileSync(seedPath, dbPath);
   console.log(JSON.stringify({ event: "db_seed", from: seedPath, to: dbPath }));
 }
+
+// Data releases ship a new database inside the image, but the Railway volume
+// (NYCFOODIE_DB) persists across deploys — it exists to keep feedback and
+// usage logs, not to pin the restaurant dataset. When the baked copy carries
+// a newer dataset than the volume copy, replace the volume copy while
+// preserving the feedback and usage_log tables.
+const USER_TABLES = ["feedback", "usage_log"] as const;
+
+function readBuiltAt(path: string): string {
+  try {
+    const db = new Database(path, { readonly: true });
+    try {
+      const row = db
+        .prepare("SELECT value FROM dataset_meta WHERE key = 'built_at'")
+        .get() as { value: string } | undefined;
+      return row?.value ?? "";
+    } finally {
+      db.close();
+    }
+  } catch {
+    return "";
+  }
+}
+
+function refreshVolumeFromImage(): void {
+  if (seedPath === dbPath || !existsSync(dbPath) || !existsSync(seedPath)) return;
+  const seedBuiltAt = readBuiltAt(seedPath);
+  const liveBuiltAt = readBuiltAt(dbPath);
+  if (!seedBuiltAt || seedBuiltAt <= liveBuiltAt) return;
+
+  // Preserve user-generated rows before replacing the file.
+  const preserved: { table: string; columns: string[]; rows: Record<string, unknown>[] }[] = [];
+  const live = new Database(dbPath, { readonly: true });
+  try {
+    for (const table of USER_TABLES) {
+      const exists = live
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+        .get(table) as { name: string } | undefined;
+      if (!exists) continue;
+      const columns = (live.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map(
+        (c) => c.name
+      );
+      const rows = live.prepare(`SELECT * FROM ${table}`).all() as Record<string, unknown>[];
+      preserved.push({ table, columns, rows });
+    }
+  } finally {
+    live.close();
+  }
+
+  copyFileSync(seedPath, dbPath);
+
+  const fresh = new Database(dbPath);
+  try {
+    for (const { table, columns, rows } of preserved) {
+      const exists = fresh
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+        .get(table) as { name: string } | undefined;
+      if (!exists || rows.length === 0) continue;
+      // Drop the autoincrement key so restored rows never collide with the
+      // seed copy's ids; natural keys (feedback.id) are kept as-is.
+      const insertCols = columns.filter((c) => !(table === "usage_log" && c === "id"));
+      const stmt = fresh.prepare(
+        `INSERT OR IGNORE INTO ${table} (${insertCols.join(", ")}) VALUES (${insertCols
+          .map(() => "?")
+          .join(", ")})`
+      );
+      const insertMany = fresh.transaction((rs: Record<string, unknown>[]) => {
+        for (const r of rs) stmt.run(...insertCols.map((c) => r[c]));
+      });
+      insertMany(rows);
+    }
+  } finally {
+    fresh.close();
+  }
+  console.log(
+    JSON.stringify({ event: "db_refresh", from_built_at: liveBuiltAt, to_built_at: seedBuiltAt })
+  );
+}
+
+refreshVolumeFromImage();
 const logPath =
   process.env.NYCFOODIE_LOG ?? join(dirname(dbPath), "nycfoodie-mcp-calls.jsonl");
 
