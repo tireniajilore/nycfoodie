@@ -357,3 +357,24 @@ All ten confirmed issues fixed, fixture-tested (27 assertions green), deployed.
 - **O7** — find_similar adds price-tier proximity (+2 same tier, +1 adjacent).
 - **I1** — get_restaurant returns match_type ("exact" | "fuzzy") and the tool
   description tells agents not to present fuzzy matches as named venues.
+
+## Round 5 live verification 2026-09-20 (commit 034afec on Railway)
+
+- B1: Ramen By Ra and Bong both return policy "reservations-required" —
+  migration 012 re-derived them from stored notes. Via Carota booking:null
+  with the Resy link kept under reservation (B3).
+- B4: Lilia notes now end "…over the phone…" — no more mid-word "g…".
+- O6: unknown UUID → found:false, suggestions [].
+- O10: compare(Lilia,Lilia) returns one entry.
+- O8: guide_consensus "cookies" → 10 results (was []); "black and white
+  cookies" → 10 incl. Russ & Daughters, Breads Bakery.
+- O9: L'industrie guide_appearances = 11 in both search card (was 3) and
+  compare.
+- O7: find_similar(La Bastide) — all tier-4 French results score 5
+  (3 cuisine + 2 same-tier); price proximity breaks ties before rating.
+  Note: Cenadou (73.5 km out) is excluded by the 30 km coverage circle —
+  that is the existing coverage-boundary backlog item, not a scoring bug.
+- I1: get_restaurant returns match_type; "Sema"→Semma is "fuzzy",
+  "Lilia" is "exact".
+- 27-assertion fixture suite green before deploy; no regressions in ramen
+  consensus or the cookie power-ranking guides.
