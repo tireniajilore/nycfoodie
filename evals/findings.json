@@ -1,0 +1,463 @@
+[
+  {
+    "assertion": "resp[\"booking\"][\"policy\"] == \"reservations-required\"",
+    "confidence": "medium",
+    "expected": "booking.policy == 'reservations-required' for both venues",
+    "id": "f-001",
+    "negative_control": {
+      "call": null,
+      "passed": null,
+      "result": "not run through this harness; finding predates the negative-control gate (manually verified 2026-09-20 ~02:53 UTC, re-verified through harness in round 0)"
+    },
+    "observed": "Round 5: booking.policy for Ramen By Ra and Bong was not 'reservations-required' (classifier had no such value; both were re-derived from stored notes via a data migration in commit 034afec). Round 0 re-check via harness: Ramen By Ra policy='reservations-required' (notes: \"Ramen By Ra doesn't take walk-ins. Reservations are required, and they're released in two-week blocks...\"); Bong policy='reservations-required'.",
+    "regression_count": 0,
+    "repro_call": {
+      "id": "f-001",
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {
+        "arguments": {
+          "city": "new-york",
+          "id": "Ramen By Ra"
+        },
+        "name": "get_restaurant"
+      }
+    },
+    "round_fixed": 0,
+    "round_found": 0,
+    "seed": "founding",
+    "severity": "medium",
+    "status": "verified",
+    "title": "booking classifier lacked a reservations-required value; Ramen By Ra and Bong misclassified",
+    "tool": "get_restaurant",
+    "regression_note_round0": "PASS"
+  },
+  {
+    "assertion": "resp[\"booking\"] is None",
+    "confidence": "medium",
+    "expected": "booking is null when the source has no booking intel, even with a reservation URL present",
+    "id": "f-002",
+    "negative_control": {
+      "call": null,
+      "passed": null,
+      "result": "not run through this harness; finding predates the negative-control gate (manually verified 2026-09-20 ~02:53 UTC, re-verified through harness in round 0)"
+    },
+    "observed": "Round 5: Via Carota's booking.policy was set from the presence of its Resy URL, not real intel. Round 0 re-check via harness: booking is null; reservation.url still present (https://resy.com/cities/new-york-ny/venues/via-carota).",
+    "regression_count": 0,
+    "repro_call": {
+      "id": "f-002",
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {
+        "arguments": {
+          "city": "new-york",
+          "id": "Via Carota"
+        },
+        "name": "get_restaurant"
+      }
+    },
+    "round_fixed": 0,
+    "round_found": 0,
+    "seed": "founding",
+    "severity": "medium",
+    "status": "verified",
+    "title": "booking policy inferred from reservation URL alone (Via Carota Resy link)",
+    "tool": "get_restaurant",
+    "regression_note_round0": "PASS"
+  },
+  {
+    "assertion": "resp[\"booking\"] is None or (len(resp[\"booking\"][\"notes\"]) <= 280 and not resp[\"booking\"][\"notes\"][-1].isalnum())",
+    "confidence": "medium",
+    "expected": "booking notes never end mid-word (last char is non-alphanumeric or the field is absent)",
+    "id": "f-003",
+    "negative_control": {
+      "call": null,
+      "passed": null,
+      "result": "not run through this harness; finding predates the negative-control gate (manually verified 2026-09-20 ~02:53 UTC, re-verified through harness in round 0)"
+    },
+    "observed": "Round 5: notes were a hard 279-char slice ending mid-word. Round 0 re-check via harness: Lilia notes are 278 chars ending '...over the phone\\u2026' (word boundary, ellipsis) \u2014 truncation now lands on a word boundary and old rows are cleaned at read time.",
+    "regression_count": 0,
+    "repro_call": {
+      "id": "f-003",
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {
+        "arguments": {
+          "city": "new-york",
+          "id": "Lilia"
+        },
+        "name": "get_restaurant"
+      }
+    },
+    "round_fixed": 0,
+    "round_found": 0,
+    "seed": "founding",
+    "severity": "low",
+    "status": "verified",
+    "title": "booking notes sliced at 279 chars mid-word; old rows not cleaned at read time",
+    "tool": "get_restaurant",
+    "regression_note_round0": "PASS"
+  },
+  {
+    "assertion": "resp[\"found\"] is False and resp[\"suggestions\"] == []",
+    "confidence": "medium",
+    "expected": "found=false with zero suggestions for an unresolvable id",
+    "id": "f-004",
+    "negative_control": {
+      "call": null,
+      "passed": null,
+      "result": "not run through this harness; finding predates the negative-control gate (manually verified 2026-09-20 ~02:53 UTC, re-verified through harness in round 0)"
+    },
+    "observed": "Round 5: unknown ids returned random venue suggestions. Round 0 re-check via harness: {\"found\": false, \"query\": \"00000000-0000-0000-0000-000000000000\", \"suggestions\": []}.",
+    "regression_count": 0,
+    "repro_call": {
+      "id": "f-004",
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {
+        "arguments": {
+          "city": "new-york",
+          "id": "00000000-0000-0000-0000-000000000000"
+        },
+        "name": "get_restaurant"
+      }
+    },
+    "round_fixed": 0,
+    "round_found": 0,
+    "seed": "founding",
+    "severity": "medium",
+    "status": "verified",
+    "title": "unknown UUID returned random venue suggestions instead of empty",
+    "tool": "get_restaurant",
+    "regression_note_round0": "PASS"
+  },
+  {
+    "assertion": "len(resp) == 1 and resp[0][\"name\"] == \"Lilia\"",
+    "confidence": "medium",
+    "expected": "exactly one result row for a duplicated input name",
+    "id": "f-005",
+    "negative_control": {
+      "call": null,
+      "passed": null,
+      "result": "not run through this harness; finding predates the negative-control gate (manually verified 2026-09-20 ~02:53 UTC, re-verified through harness in round 0)"
+    },
+    "observed": "Round 5: comparing Lilia with Lilia returned two rows. Round 0 re-check via harness: returns a list of 1 row (Lilia).",
+    "regression_count": 0,
+    "repro_call": {
+      "id": "f-005",
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {
+        "arguments": {
+          "city": "new-york",
+          "restaurants": [
+            "Lilia",
+            "Lilia"
+          ]
+        },
+        "name": "compare_restaurants"
+      }
+    },
+    "round_fixed": 0,
+    "round_found": 0,
+    "seed": "founding",
+    "severity": "low",
+    "status": "verified",
+    "title": "compare_restaurants duplicated an identical venue instead of deduping",
+    "tool": "compare_restaurants",
+    "regression_note_round0": "PASS"
+  },
+  {
+    "assertion": "len(resp) == 10",
+    "confidence": "medium",
+    "expected": "10 results for each of the two themes",
+    "id": "f-006",
+    "negative_control": {
+      "call": null,
+      "passed": null,
+      "result": "not run through this harness; finding predates the negative-control gate (manually verified 2026-09-20 ~02:53 UTC, re-verified through harness in round 0)"
+    },
+    "observed": "Round 5: theme 'cookies' and 'black and white cookies' returned nothing/wrong sets. Round 0 re-check via harness: 'cookies' -> 10 results (Orwashers Bakery first); 'black and white cookies' -> 10 results (Barney Greengrass first). Tokenised theme matching with &/and normalised.",
+    "regression_count": 0,
+    "repro_call": {
+      "id": "f-006",
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {
+        "arguments": {
+          "city": "new-york",
+          "theme": "cookies"
+        },
+        "name": "guide_consensus"
+      }
+    },
+    "round_fixed": 0,
+    "round_found": 0,
+    "seed": "founding",
+    "severity": "medium",
+    "status": "verified",
+    "title": "guide_consensus theme matching missed 'cookies'/'black and white cookies' (no tokenisation, &/and not normalised)",
+    "tool": "guide_consensus",
+    "regression_note_round0": "PASS"
+  },
+  {
+    "assertion": "[r for r in resp if \"industrie\" in r[\"name\"].lower()][0][\"guide_appearances\"] == 11",
+    "confidence": "medium",
+    "expected": "guide_appearances == 11 (count on cards, list length on detail) in both search and compare",
+    "id": "f-007",
+    "negative_control": {
+      "call": null,
+      "passed": null,
+      "result": "not run through this harness; finding predates the negative-control gate (manually verified 2026-09-20 ~02:53 UTC, re-verified through harness in round 0)"
+    },
+    "observed": "Round 5: guide appearance count for L'Industrie differed across tools. Round 0 re-check via harness: get_restaurant guide_appearances is an 11-entry list; search_restaurants card 'guide_appearances': 11; compare_restaurants row 'guide_appearances': 11. Count and list length agree.",
+    "regression_count": 0,
+    "repro_call": {
+      "id": "f-007",
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {
+        "arguments": {
+          "city": "new-york",
+          "restaurants": [
+            "L'Industrie",
+            "Lilia"
+          ]
+        },
+        "name": "compare_restaurants"
+      }
+    },
+    "round_fixed": 0,
+    "round_found": 0,
+    "seed": "founding",
+    "severity": "low",
+    "status": "verified",
+    "title": "L'Industrie guide appearance count disagreed between search and compare",
+    "tool": "compare_restaurants",
+    "regression_note_round0": "PASS"
+  },
+  {
+    "assertion": "all(isinstance(r.get(\"similarity\"), (int, float)) for r in resp) and [r[\"similarity\"] for r in resp] == sorted((r[\"similarity\"] for r in resp), reverse=True) and all(r[\"price_tier\"] in (2, 3) for r in resp)",
+    "confidence": "medium",
+    "expected": "rows carry numeric similarity sorted descending; returned tiers cluster at same/adjacent to the source tier",
+    "id": "f-008",
+    "negative_control": {
+      "call": null,
+      "passed": null,
+      "result": "not run through this harness; finding predates the negative-control gate (manually verified 2026-09-20 ~02:53 UTC, re-verified through harness in round 0)"
+    },
+    "observed": "Round 5: price-tier proximity was not part of the similarity score. Round 0 re-check via harness: every row carries a numeric 'similarity', sorted descending (18,18,17,14,13,13,13,13,12,12); Lilia is tier 3 and all 10 rows are tier 2 or 3 (same or adjacent); top-3 are all tier 3 (Via Carota, L'Artusi, Misi).",
+    "regression_count": 0,
+    "repro_call": {
+      "id": "f-008",
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {
+        "arguments": {
+          "city": "new-york",
+          "id": "Lilia",
+          "limit": 10
+        },
+        "name": "find_similar"
+      }
+    },
+    "round_fixed": 0,
+    "round_found": 0,
+    "seed": "founding",
+    "severity": "low",
+    "status": "verified",
+    "title": "find_similar ignored price-tier proximity in scoring",
+    "tool": "find_similar",
+    "regression_note_round0": "PASS"
+  },
+  {
+    "assertion": "resp[\"name\"] == \"Contrasto\" and resp[\"match_type\"] == \"fuzzy\"",
+    "confidence": "medium",
+    "expected": "match_type='fuzzy' and the resolved venue named honestly (Contrasto)",
+    "id": "f-009",
+    "negative_control": {
+      "call": null,
+      "passed": null,
+      "result": "not run through this harness; finding predates the negative-control gate (manually verified 2026-09-20 ~02:53 UTC, re-verified through harness in round 0)"
+    },
+    "observed": "Round 5: 'Contra' prefix-matched Contrasto and was presented without labelling. Round 0 re-check via harness: returns name='Contrasto', match_type='fuzzy'. The tool description now warns agents not to present a fuzzy match as the named venue.",
+    "regression_count": 0,
+    "repro_call": {
+      "id": "f-009",
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {
+        "arguments": {
+          "city": "new-york",
+          "id": "Contra"
+        },
+        "name": "get_restaurant"
+      }
+    },
+    "round_fixed": 0,
+    "round_found": 0,
+    "seed": "founding",
+    "severity": "medium",
+    "status": "verified",
+    "title": "get_restaurant silently resolved Contra to Contrasto with no match label",
+    "tool": "get_restaurant",
+    "regression_note_round0": "PASS"
+  },
+  {
+    "assertion": "resp[\"name\"] == \"Cenadou\"",
+    "confidence": "medium",
+    "expected": "decide: either enforce the 30km boundary in get_restaurant (refuse or flag out-of-coverage venues) or document that direct name lookup bypasses it",
+    "id": "f-010a",
+    "negative_control": {
+      "call": null,
+      "passed": null,
+      "result": "tracking item carried over from Round 5; no fix claimed, nothing to disprove"
+    },
+    "observed": "Round 5 evaluator flagged Cenadou (73km from Manhattan) appearing despite documented 30km coverage. Round 0 mechanism isolated: Cenadou IS in the DB (North Salem NY, 41.337046,-73.563263, 73.5km from Times Sq, French/Date Nights, rating 8.2). search_restaurants enforces the boundary (text query 'Cenadou' -> []; geo search near North Salem -> 'outside the New York coverage area (30 km around Manhattan)'), but get_restaurant resolves it by exact name with no distance gate. Diagnosed in Round 5 as an existing coverage-boundary backlog item, not a scoring bug; deliberately not implemented.",
+    "regression_count": 0,
+    "repro_call": {
+      "jsonrpc": "2.0",
+      "id": "f-010a",
+      "method": "tools/call",
+      "params": {
+        "name": "get_restaurant",
+        "arguments": {
+          "city": "new-york",
+          "id": "Cenadou"
+        }
+      }
+    },
+    "round_fixed": null,
+    "round_found": 0,
+    "seed": "founding",
+    "severity": "low",
+    "status": "open",
+    "title": "coverage boundary not enforced: Cenadou 73km out returned despite 30km coverage claim (deferred by design)",
+    "tool": "get_restaurant"
+  },
+  {
+    "assertion": "resp[0][\"name\"] == \"L'industrie Pizzeria\"",
+    "confidence": "medium",
+    "expected": "correct venue first for the 'industrie' prefix query (holds as of round 0)",
+    "id": "f-010b",
+    "negative_control": {
+      "call": null,
+      "passed": null,
+      "result": "tracking item carried over from Round 5; behaviour confirmed correct in round 0, no fix claimed"
+    },
+    "observed": "Round 5 evaluator flagged dilution of the 'industrie' query. Diagnosed as a non-issue: the correct venue already ranks first. Round 0 re-check via harness: query 'industrie' returns \"L'industrie Pizzeria\" first, followed by Semma, Mama's Too (10 results). Deliberately not implemented.",
+    "regression_count": 0,
+    "repro_call": {
+      "id": "f-010b",
+      "jsonrpc": "2.0",
+      "method": "tools/call",
+      "params": {
+        "arguments": {
+          "city": "new-york",
+          "query": "industrie"
+        },
+        "name": "search_restaurants"
+      }
+    },
+    "round_fixed": null,
+    "round_found": 0,
+    "seed": "founding",
+    "severity": "low",
+    "status": "open",
+    "title": "'industrie' search ranking diluted by near-matches (deferred by design; correct venue already first)",
+    "tool": "search_restaurants"
+  },
+  {
+    "id": "f-012",
+    "status": "open",
+    "title": "unknown occasion string returns empty array instead of an error",
+    "tool": "search_restaurants",
+    "repro_call": {
+      "jsonrpc": "2.0",
+      "id": "f-012",
+      "method": "tools/call",
+      "params": {
+        "name": "search_restaurants",
+        "arguments": {
+          "city": "new-york",
+          "occasion": "BanquetXYZ"
+        }
+      }
+    },
+    "observed": "occasion='BanquetXYZ' (not in the documented allowed set) returns [] with no error. Mechanism: the input schema validates occasion's TYPE but not its VALUE. occasion=12345 (number) -> MCP -32602 input validation error; occasion='' -> treated as no filter (5 results); occasion='Happy Hours' (valid) -> 5 results. Contrast: city='nyc' (unsupported) is rejected with a descriptive message ('Unsupported city ... Supported: new-york'). A typo'd occasion ('date-nite') therefore fails silently with no hint.",
+    "expected": "unknown occasion values are rejected with a message listing the allowed values, like unsupported cities are \u2014 not a silent empty array",
+    "negative_control": {
+      "call": {
+        "jsonrpc": "2.0",
+        "id": "f-012-neg",
+        "method": "tools/call",
+        "params": {
+          "name": "search_restaurants",
+          "arguments": {
+            "city": "new-york",
+            "limit": 5,
+            "occasion": ""
+          }
+        }
+      },
+      "result": "disproof attempt: find an invalid occasion STRING that errors (which would kill the 'no value validation' theory). Empty string is treated as no-filter (n=5); no invalid string value errors \u2014 only wrong-type values do. Theory survives.",
+      "passed": true
+    },
+    "assertion": "not (isinstance(resp, list) and len(resp) == 0)",
+    "severity": "low",
+    "confidence": "medium",
+    "round_found": 0,
+    "round_fixed": null,
+    "regression_count": 0,
+    "seed": "founding",
+    "notes": "[review 2026-09-20: assertion tightened \u2014 it must fail while the bug returns [] and pass when an error/rejection replaces the silent empty list.]"
+  },
+  {
+    "id": "f-013",
+    "status": "open",
+    "title": "guide_appearances is a list in get_restaurant but an int count in search/compare",
+    "tool": "compare_restaurants",
+    "repro_call": {
+      "jsonrpc": "2.0",
+      "id": "f-013",
+      "method": "tools/call",
+      "params": {
+        "name": "compare_restaurants",
+        "arguments": {
+          "city": "new-york",
+          "restaurants": [
+            "L'Industrie",
+            "Lilia"
+          ]
+        }
+      }
+    },
+    "observed": "Same field name, two types. get_restaurant returns guide_appearances as the entry LIST (L'Industrie: 11 entries; Lilia: 18 entries). search_restaurants cards and compare_restaurants rows return it as an INT count (L'Industrie: 11; Lilia: 18). Values agree numerically (count == list length) so this is a representational difference, not data disagreement \u2014 but an agent joining card and detail payloads on the same field name gets different shapes.",
+    "expected": "one field name, one type across tools: either counts everywhere or lists everywhere (documented); alternatively rename the card field (e.g. guide_appearance_count)",
+    "negative_control": {
+      "call": {
+        "jsonrpc": "2.0",
+        "id": "f-013-neg",
+        "method": "tools/call",
+        "params": {
+          "name": "get_restaurant",
+          "arguments": {
+            "city": "new-york",
+            "id": "Lilia"
+          }
+        }
+      },
+      "result": "disproof attempt: find a venue where card count != detail list length (would mean data disagreement, not a type difference). L'Industrie: 11 == 11; Lilia: 18 == 18. No disagreement found \u2014 the difference is purely representational. Theory survives.",
+      "passed": true
+    },
+    "assertion": "type(get_resp[\"guide_appearances\"]) is type(search_resp[\"guide_appearances\"])",
+    "severity": "medium",
+    "confidence": "high",
+    "round_found": 0,
+    "round_fixed": null,
+    "regression_count": 0,
+    "seed": "founding",
+    "assertion_scope": "requires both get_restaurant and search_restaurants responses for the same venue; passes when the field has one type across tools",
+    "notes": "[review 2026-09-20: assertion rescoped to cross-tool type agreement \u2014 a single-tool isinstance check would pass while the bug persists.]"
+  }
+]

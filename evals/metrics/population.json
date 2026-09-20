@@ -1,0 +1,101 @@
+{
+  "round": 0,
+  "build": "d6f0959",
+  "data_as_of": "2026-09-19T19:35:47.520Z",
+  "sample": {
+    "cards": 60,
+    "details": 7
+  },
+  "null_rates": {
+    "cards": {
+      "rating": 0.1,
+      "price_tier": 0.0,
+      "price_label": 0.0,
+      "neighborhood": 0.0,
+      "cuisines": 0.0,
+      "address": 0.0,
+      "guide_appearances": 0.0,
+      "closed": 0.0,
+      "crawled_at": 0.0,
+      "booking": 0.8,
+      "review_headline": 0.1,
+      "phone": 1.0,
+      "website": 1.0,
+      "reservation": 1.0
+    },
+    "details": {
+      "rating": 0.143,
+      "price_tier": 0.0,
+      "neighborhood": 0.0,
+      "phone": 0.0,
+      "website": 0.0,
+      "reservation": 0.571,
+      "booking": 0.571,
+      "review": 0.143,
+      "tags": 0.0,
+      "guide_appearances": 0.0,
+      "closed": 0.0,
+      "crawled_at": 0.0
+    }
+  },
+  "enums": {
+    "cards": {
+      "price_tier": {
+        "4": 4,
+        "2": 20,
+        "3": 17,
+        "1": 19
+      },
+      "price_label": {
+        "VERY_EXPENSIVE": 4,
+        "MODERATELY_EXPENSIVE": 20,
+        "EXPENSIVE": 17,
+        "INEXPENSIVE": 19
+      },
+      "closed": {
+        "False": 59,
+        "True": 1
+      },
+      "booking.policy": {
+        "reservations-recommended": 11,
+        "null": 48,
+        "reservations-required": 1
+      },
+      "neighborhood_top": {
+        "Williamsburg": 14,
+        "West Village": 12,
+        "Upper East Side": 3,
+        "East Village": 3,
+        "Midtown": 2,
+        "Chinatown": 2,
+        "Greenpoint": 2,
+        "Upper West Side": 2
+      }
+    },
+    "details": {
+      "booking.policy": {
+        "reservations-required": 2,
+        "null": 4,
+        "reservations-recommended": 1
+      },
+      "match_type": {
+        "exact": 5,
+        "fuzzy": 2
+      },
+      "closed": {
+        "False": 7
+      }
+    }
+  },
+  "booking_notes_len": {
+    "details": [
+      273,
+      191,
+      "null",
+      "null",
+      "null",
+      "null",
+      278
+    ]
+  }
+}

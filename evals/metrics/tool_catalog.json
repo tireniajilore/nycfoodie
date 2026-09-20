@@ -1,0 +1,356 @@
+{
+  "tools": [
+    {
+      "name": "search_restaurants",
+      "description": "Search restaurants by free text, cuisine, neighbourhood, occasion or price, optionally near a point. Use when the user describes what they want (e.g. 'Italian date night in the West Village', 'ramen near me') rather than naming a specific restaurant. Free text matches names, tags, review prose and guide blurbs (e.g. 'cacio e pepe'). Returns compact matches with Infatuation rating (0\u201310), price tier, address and tags. Known-closed venues are excluded by default. Coverage for city='new-york' is the five boroughs plus the immediate metro (within 30 km of Manhattan). With no query or filters, returns the highest-rated venues.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "query": {
+            "description": "Free text, e.g. 'date-night Italian'",
+            "type": "string"
+          },
+          "city": {
+            "type": "string",
+            "description": "City slug, always required. Currently 'new-york', covering the five boroughs plus the immediate metro (within 30 km of Manhattan)."
+          },
+          "cuisine": {
+            "description": "e.g. 'Italian', 'ramen'",
+            "type": "string"
+          },
+          "neighborhood": {
+            "description": "e.g. 'West Village', or a borough like 'Brooklyn'",
+            "type": "string"
+          },
+          "occasion": {
+            "description": "Occasion tag. Allowed: 'Date Nights', 'Happy Hours', 'Pre-Theater', 'See & Be Seen', 'Serious Takeout Operation', 'Unique Dining Experiences', 'Wasting Your Time & Money'. Hyphens and spaces are flexible ('date-night' works).",
+            "type": "string"
+          },
+          "min_rating": {
+            "description": "Minimum Infatuation rating",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10
+          },
+          "price_tier": {
+            "description": "1 ($) to 4 ($$$$)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          },
+          "include_closed": {
+            "description": "Include known-closed venues (default false)",
+            "type": "boolean"
+          },
+          "lat": {
+            "description": "Latitude for proximity search. Must be given together with lng; radius_km defaults to 5 km when omitted. A location outside the NYC coverage area is rejected with an error.",
+            "type": "number"
+          },
+          "lng": {
+            "description": "Longitude for proximity search. Must be given together with lat; radius_km defaults to 5 km when omitted.",
+            "type": "number"
+          },
+          "radius_km": {
+            "description": "Search radius in kilometres (default 5 when lat/lng are given without it). Requires lat and lng.",
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "sort": {
+            "description": "Sort by rating (default) or guide appearances",
+            "type": "string",
+            "enum": [
+              "rating",
+              "guides"
+            ]
+          },
+          "limit": {
+            "description": "Max results (default 10)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "required": [
+          "city"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "get_restaurant",
+      "description": "Get the full picture for one restaurant in one call: Infatuation rating (0\u201310), price tier, address, reservation link, booking intel, review summary, tags and every guide it appears in. Use when the user names a specific restaurant. Full review prose is opt-in via include_prose (default: headline and summary only). review.headline is the source's actual headline when one exists, otherwise null \u2014 use review.summary for the descriptive text. match_type is 'exact' when the id or name matched verbatim, 'fuzzy' when it was resolved from a partial/typo'd name \u2014 never present a fuzzy match as the venue the user named without saying so. booking is null when the source has no booking intel (not the same as walk-in-only); a reservation link alone never implies a booking policy. data_as_of is the dataset vintage and crawled_at is when this venue was last crawled \u2014 caveat fast-decaying claims (closures especially) when these are old.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Canonical restaurant id, or a name to resolve"
+          },
+          "city": {
+            "type": "string",
+            "description": "City slug, always required. Currently 'new-york', covering the five boroughs plus the immediate metro (within 30 km of Manhattan)."
+          },
+          "include_prose": {
+            "description": "Include the full review text (default false: headline + summary only)",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "city"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "compare_restaurants",
+      "description": "Compare 2\u20133 named restaurants head-to-head as structured data (rating, price, tags, review summary). Use when the user asks to choose between specific places, e.g. 'should I go to X or Y?'.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "restaurants": {
+            "minItems": 2,
+            "maxItems": 3,
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Restaurant ids or names to compare"
+          },
+          "city": {
+            "type": "string",
+            "description": "City slug, always required. Currently 'new-york', covering the five boroughs plus the immediate metro (within 30 km of Manhattan)."
+          }
+        },
+        "required": [
+          "restaurants",
+          "city"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "find_guides",
+      "description": "Find curated editorial guides (ranked lists) matching a theme, e.g. 'best ramen'. Returns each guide with its ranked entries, blurbs and linked restaurants. Use when the user wants the editorial lists themselves rather than individual restaurant picks. Set include_entries=false to list guide titles and metadata without pulling every entry blurb.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string",
+            "description": "City slug, always required. Currently 'new-york', covering the five boroughs plus the immediate metro (within 30 km of Manhattan)."
+          },
+          "query": {
+            "description": "Theme, e.g. 'best ramen', 'date night'",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Max results (default 10)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          },
+          "include_entries": {
+            "description": "Set false to return guide metadata without the ranked entry blurbs (default true)",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "city"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "find_similar",
+      "description": "Find restaurants similar to a named one, scored by shared cuisine, occasion and neighbourhood tags, price-tier proximity and guide co-occurrence. Use for 'like X' or 'alternatives to X' requests.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Canonical restaurant id, or a name to resolve"
+          },
+          "city": {
+            "type": "string",
+            "description": "City slug, always required. Currently 'new-york', covering the five boroughs plus the immediate metro (within 30 km of Manhattan)."
+          },
+          "limit": {
+            "description": "Max results (default 10)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "required": [
+          "id",
+          "city"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "guide_consensus",
+      "description": "Rank restaurants by how many distinct guides feature them, optionally filtered by theme. Use for 'where can't I go wrong' or safest-bet picks. Differs from find_guides: this returns ranked restaurants, not the guides themselves.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string",
+            "description": "City slug, always required. Currently 'new-york', covering the five boroughs plus the immediate metro (within 30 km of Manhattan)."
+          },
+          "theme": {
+            "description": "Guide theme, e.g. 'ramen', 'brunch'",
+            "type": "string"
+          },
+          "limit": {
+            "description": "Max results (default 10)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "required": [
+          "city"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "top_rated",
+      "description": "List the highest-rated restaurants (Infatuation 0\u201310 scale), with optional cuisine, neighbourhood and price filters. Use for 'best in the city' requests. Differs from search_restaurants: no free-text query, strictly rating-ordered.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "city": {
+            "type": "string",
+            "description": "City slug, always required. Currently 'new-york', covering the five boroughs plus the immediate metro (within 30 km of Manhattan)."
+          },
+          "cuisine": {
+            "description": "e.g. 'Italian', 'ramen'",
+            "type": "string"
+          },
+          "neighborhood": {
+            "description": "e.g. 'West Village', or a borough like 'Brooklyn'",
+            "type": "string"
+          },
+          "occasion": {
+            "description": "Occasion tag. Allowed: 'Date Nights', 'Happy Hours', 'Pre-Theater', 'See & Be Seen', 'Serious Takeout Operation', 'Unique Dining Experiences', 'Wasting Your Time & Money'. Hyphens and spaces are flexible ('date-night' works).",
+            "type": "string"
+          },
+          "min_rating": {
+            "description": "Minimum Infatuation rating",
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10
+          },
+          "price_tier": {
+            "description": "1 ($) to 4 ($$$$)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 4
+          },
+          "include_closed": {
+            "description": "Include known-closed venues (default false)",
+            "type": "boolean"
+          },
+          "lat": {
+            "description": "Latitude for proximity search. Must be given together with lng; radius_km defaults to 5 km when omitted. A location outside the NYC coverage area is rejected with an error.",
+            "type": "number"
+          },
+          "lng": {
+            "description": "Longitude for proximity search. Must be given together with lat; radius_km defaults to 5 km when omitted.",
+            "type": "number"
+          },
+          "radius_km": {
+            "description": "Search radius in kilometres (default 5 when lat/lng are given without it). Requires lat and lng.",
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "limit": {
+            "description": "Max results (default 10)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50
+          }
+        },
+        "required": [
+          "city"
+        ]
+      },
+      "annotations": {
+        "readOnlyHint": true
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    },
+    {
+      "name": "submit_feedback",
+      "description": "Record feedback on a tool result: a 1\u20135 rating, a comment, or both (at least one is required). Use after showing the user a recommendation to log what was good or wrong. Each call stores a new feedback entry; it changes nothing the user sees.",
+      "inputSchema": {
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "object",
+        "properties": {
+          "tool": {
+            "description": "Which tool the feedback is about, e.g. 'search_restaurants'",
+            "type": "string"
+          },
+          "rating": {
+            "description": "1 (poor) to 5 (excellent)",
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 5
+          },
+          "comment": {
+            "description": "What was good or wrong",
+            "type": "string"
+          }
+        }
+      },
+      "annotations": {
+        "readOnlyHint": false,
+        "idempotentHint": false
+      },
+      "execution": {
+        "taskSupport": "forbidden"
+      }
+    }
+  ]
+}
