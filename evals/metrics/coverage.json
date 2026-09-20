@@ -1,18 +1,18 @@
 {
-  "round": 0,
+  "round": 1,
   "tools_exercised": [
     "get_restaurant",
     "compare_restaurants",
     "guide_consensus",
     "search_restaurants",
     "find_similar",
-    "top_rated"
+    "top_rated",
+    "find_guides"
   ],
   "tools_not_exercised": [
-    "find_guides",
     "submit_feedback"
   ],
-  "tools_not_exercised_note": "submit_feedback deliberately not called against production (writes to the user's feedback store); find_guides untouched this round",
+  "tools_not_exercised_note": "submit_feedback deliberately not called against production (writes to the user's feedback store); find_guides now exercised (round-0 gap closed)",
   "params_exercised": {
     "search_restaurants": [
       "city",
@@ -44,9 +44,7 @@
     ],
     "guide_consensus": [
       "city",
-      "theme"
-    ],
-    "guide_consensus_not_exercised": [
+      "theme",
       "limit"
     ],
     "find_similar": [
@@ -57,19 +55,30 @@
     "top_rated": [
       "city",
       "limit",
-      "radius_km"
+      "radius_km",
+      "occasion",
+      "min_rating",
+      "neighborhood"
     ],
     "top_rated_not_exercised": [
       "cuisine",
-      "neighborhood",
-      "occasion",
-      "min_rating",
       "price_tier",
       "include_closed",
       "lat",
-      "lng",
-      "sort"
+      "lng"
+    ],
+    "find_guides": [
+      "city",
+      "query",
+      "limit",
+      "include_entries"
     ]
   },
-  "clean_rounds": {}
+  "clean_rounds": {
+    "filter_honesty": 1,
+    "no_padding": 1,
+    "idempotency": 1,
+    "error_over_silence_partial": 1
+  },
+  "clean_rounds_note": "filter honesty, no padding and idempotency clean in rounds 0 and 1; error-over-silence clean except the known f-012 class (unknown enum strings return [] in search_restaurants and top_rated)"
 }

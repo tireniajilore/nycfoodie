@@ -1,0 +1,109 @@
+[
+  {
+    "id": "exp-fg-pizza",
+    "tool": "find_guides",
+    "args": {
+      "city": "new-york",
+      "query": "pizza",
+      "limit": 5
+    }
+  },
+  {
+    "id": "exp-fg-pizza-noent",
+    "tool": "find_guides",
+    "args": {
+      "city": "new-york",
+      "query": "pizza",
+      "limit": 5,
+      "include_entries": false
+    }
+  },
+  {
+    "id": "exp-fg-pizza-rep",
+    "tool": "find_guides",
+    "args": {
+      "city": "new-york",
+      "query": "pizza",
+      "limit": 5
+    }
+  },
+  {
+    "id": "exp-fg-imposs",
+    "tool": "find_guides",
+    "args": {
+      "city": "new-york",
+      "query": "xyzzy-no-such-cuisine",
+      "limit": 5
+    }
+  },
+  {
+    "id": "exp-gc-pizza",
+    "tool": "guide_consensus",
+    "args": {
+      "city": "new-york",
+      "theme": "pizza",
+      "limit": 5
+    }
+  },
+  {
+    "id": "exp-gc-pizza-rep",
+    "tool": "guide_consensus",
+    "args": {
+      "city": "new-york",
+      "theme": "pizza",
+      "limit": 5
+    }
+  },
+  {
+    "id": "exp-gc-imposs",
+    "tool": "guide_consensus",
+    "args": {
+      "city": "new-york",
+      "theme": "quantum entanglement tasting menu",
+      "limit": 5
+    }
+  },
+  {
+    "id": "exp-tr-5",
+    "tool": "top_rated",
+    "args": {
+      "city": "new-york",
+      "limit": 5
+    }
+  },
+  {
+    "id": "exp-tr-5-rep",
+    "tool": "top_rated",
+    "args": {
+      "city": "new-york",
+      "limit": 5
+    }
+  },
+  {
+    "id": "exp-tr-min10",
+    "tool": "top_rated",
+    "args": {
+      "city": "new-york",
+      "min_rating": 10,
+      "limit": 5
+    }
+  },
+  {
+    "id": "exp-tr-narnia",
+    "tool": "top_rated",
+    "args": {
+      "city": "new-york",
+      "neighborhood": "Narnia",
+      "limit": 5
+    }
+  },
+  {
+    "id": "exp-fg-eater",
+    "tool": "find_guides",
+    "args": {
+      "city": "new-york",
+      "query": "Eater",
+      "limit": 5
+    }
+  }
+]

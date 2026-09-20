@@ -1,0 +1,363 @@
+[
+  {
+    "id": "f-001",
+    "envelope": {
+      "jsonrpc": "2.0",
+      "id": "reg1-f-001",
+      "method": "tools/call",
+      "params": {
+        "name": "get_restaurant",
+        "arguments": {
+          "city": "new-york",
+          "id": "Ramen By Ra"
+        }
+      }
+    },
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n  \"id\": \"b9a70fdc-0d3d-4ce2-9d85-abda9f4bc59b\",\n  \"name\": \"Ramen By Ra\",\n  \"match_type\": \"exact\",\n  \"crawled_at\": \"2026-09-19T19:15:00.326Z\",\n  \"rating\": 8,\n  \"price_tier\": 2,\n  \"price_label\": \"MODERATELY_EXPENSIVE\",\n  \"neighborhood\": \"East Village\",\n  \"address\": {\n    \"line1\": \"70 E 1st Street\",\n    \"locality\": \"New York\",\n    \"region\": \"New York\",\n    \"postal_code\": \"10003\",\n    \"latitude\": 40.72356,\n    \"longitude\": -73.9888\n  },\n  \"phone\": \"\",\n  \"website\": \"https://www.ramenbyra.com/\",\n  \"reservation\": null,\n  \"booking\": {\n    \"policy\": \"reservations-required\",\n    \"notes\": \"Ramen By Ra doesn\u2019t take walk-ins. Reservations are required, and they\u2019re released in two-week blocks on the 1st and 15th of the month at 9am. (To eat on the 20th, you\u2019ll have to reserve on the 1st.) In our experience, it\u2019s not hard to snag a seat as long you\u2019re online at\u2026\"\n  },\n  \"closed\": false,\n  \"source_url\": \"https://theinfatuation.com/new-york/reviews/ramen-by-ra\",\n  \"review\": {\n    \"title\": \"Ramen By Ra\",\n    \"headline\": \"Noodles for breakfast and a side of calm at Ramen By Ra\",\n    \"summary\": \"Ramen By Ra does a style of breakfast ramen you won\u2019t find elsewhere in NYC.\",\n    \"author\": \"Will Hartman\",\n    \"published_at\": \"2026-01-27T15:00:00.000Z\",\n    \"url\": \"https://theinfatuation.com/new-york/reviews/ramen-by-ra\"\n  },\n  \"tags\": {\n    \"cuisine\": [\n      \"Ramen\"\n    ],\n    \"neighborhood\": [\n      \"East Village\"\n    ]\n  },\n  \"guide_appearances\": [\n    {\n      \"title\": \"11 New Black-Owned Restaurants In NYC\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/new-black-owned-restaurants-in-nyc\",\n      \"position\": 1,\n      \"entry_name\": null,\n      \"blurb\": \"Ramen by Ra, which opened in December, is a small counter in the glass-enclosed Bowery Market on the Lower East Side. It specializes in asa ramen, typically eaten as breakfast in Japan, with chef Rasheeda Purdie's riffs on New York breakfast classics. There's a BEC ramen with thick slabs of smoked bacon, a seasoned egg, and cheese foam, as well as ramen with a slice of nova and scallions. The broth is clean and savory, and makes for a great canvas for their toppings.\"\n    },\n    {\n      \"title\": \"The Best NYC Restaurants For Dining Solo\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/great-restaurants-for-dining-solo\",\n      \"position\": 4,\n      \"entry_name\": null,\n      \"blurb\": \"Ramen By Ra specializes in asa-style ramen, or breakfast ramen. Bowls are loaded with things like bacon, egg, and cheese, or steak and egg, or tomato-egg drop, all of which are delightful with a cup of hojicha by yourself. The restaurant is closet-sized and gets nice afternoon sun, so block off time on a weekday, and have lunch here.\"\n    },\n    {\n      \"title\": \"The Best Ramen In NYC\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/best-ramen-nyc\",\n      \"position\": 4,\n      \"entry_name\": null,\n      \"blurb\": \"In the East Village, Ramen By Ra is the only spot on this list that specializes in asa-style, or breakfast ramen. Their BEC ramen comes with thick slabs of bacon, a perfectly gooey marinated egg, and a light snowfall of parmesan cheese, and it\u2019s just one of the bowls at this extremely charming counter. All their ramen starts with a base of a clear shoyu broth, with flavorful oils added to each bowl, like chimichurri oil on the standout steak and egg ramen. They also offer cups of broth and breakfast bao at their walk-up window.\"\n    },\n    {\n      \"title\": \"The Best Restaurants In The East Village\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/the-best-restaurants-in-the-east-village\",\n      \"position\": 21,\n      \"entry_name\": null,\n      \"blurb\": \"There are a lot of ramen shops in the East Village, but only one that specializes in asa-style, or breakfast ramen. The tiny spot on 1st Street serves bowls topped with bacon, egg, and cheese, or lox. It\u2019s a bit of a pain to make a reservation, but we love their food\u2014especially the steak and eggs with a very vibrant chimichurri, and they do sell cups of broth and bao from their front window.\"\n    },\n    {\n      \"title\": \"The Spots Of The Winter, NYC Edition \",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/spots-of-winter-ny\",\n      \"position\": 13,\n      \"entry_name\": null,\n      \"blurb\": \"Yes, winter is all about fire-lit nights, but it\u2019s also all about soup for breakfast. Skip that bodega BEC, and instead get Ramen By Ra\u2019s noodles with thick slabs of bacon, marinated eggs, and showers of parmesan cheese. The tiny, sun-soaked East Village spot, with cozy cabinets and sparkling crystal bowls, specializes in asa-style, or breakfast ramen, and it really hits the spot on a chilly day. You\u2019ll have to book in advance\u2014or you can stop by for some takeaway broth or a breakfast bao in the morning.\"\n    },\n    {\n      \"title\": \"The Toughest Reservations In NYC Right Now (And How To Get Them)\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/toughest-restaurant-reservations-nyc\",\n      \"position\": 8,\n      \"entry_name\": null,\n      \"blurb\": \"**Verdict: **The East Village iteration of Ramen By Ra has 50% more seating than the now-closed Noho location. Unfortunately, that only adds up to a total of six seats. The place is understandably a pain to get into, but if you need something more stylish than your usual noodle soup, it\u2019s worth keeping an eye on their reservation page. Start with the bao stuffed with lox and fluffy cream cheese, then try the steak-and-egg ramen with sliced ribeye and zippy chimichurri oil.\"\n    }\n  ]\n}"
+          }
+        ]
+      },
+      "jsonrpc": "2.0",
+      "id": "reg1-f-001"
+    }
+  },
+  {
+    "id": "f-002",
+    "envelope": {
+      "jsonrpc": "2.0",
+      "id": "reg1-f-002",
+      "method": "tools/call",
+      "params": {
+        "name": "get_restaurant",
+        "arguments": {
+          "city": "new-york",
+          "id": "Via Carota"
+        }
+      }
+    },
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n  \"id\": \"49d3919c-1e50-484c-aed4-cc1ca8da78a4\",\n  \"name\": \"Via Carota\",\n  \"match_type\": \"exact\",\n  \"crawled_at\": \"2026-09-19T19:08:24.041Z\",\n  \"rating\": 9.5,\n  \"price_tier\": 3,\n  \"price_label\": \"EXPENSIVE\",\n  \"neighborhood\": \"West Village\",\n  \"address\": {\n    \"line1\": \"51 Grove St.\",\n    \"locality\": \"New York\",\n    \"region\": \"NY\",\n    \"postal_code\": \"10014\",\n    \"latitude\": 40.73303122146186,\n    \"longitude\": -74.00358438491821\n  },\n  \"phone\": \"\",\n  \"website\": \"http://www.viacarota.com/\",\n  \"reservation\": {\n    \"url\": \"https://resy.com/cities/new-york-ny/venues/via-carota\",\n    \"platform\": \"RESY\"\n  },\n  \"booking\": null,\n  \"closed\": false,\n  \"source_url\": \"https://theinfatuation.com/new-york/reviews/via-carota\",\n  \"review\": {\n    \"title\": \"Via Carota\",\n    \"headline\": \"There's always a wait at Via Carota, and it's always worth it\",\n    \"summary\": \"Via Carota is a mostly walk-in only Italian spot in the West Village, and there\u2019s a good chance you\u2019ll have to wait a few hours for a table. It\u2019s worth it.\",\n    \"author\": \"Bryan Kim\",\n    \"published_at\": \"2025-08-16T15:00:00.000Z\",\n    \"url\": \"https://theinfatuation.com/new-york/reviews/via-carota\"\n  },\n  \"tags\": {\n    \"cuisine\": [\n      \"Italian\",\n      \"Pasta\"\n    ],\n    \"neighborhood\": [\n      \"West Village\"\n    ],\n    \"occasion\": [\n      \"Date Nights\"\n    ]\n  },\n  \"guide_appearances\": [\n    {\n      \"title\": \"10 Great Queer-Owned Restaurants In NYC\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/best-queer-owned-restaurants-nyc\",\n      \"position\": 9,\n      \"entry_name\": null,\n      \"blurb\": \"Partners Rita Sodi and Jody Williams are behind what might be the most popular Italian restaurant in the city. And their other spots ([Buvette](https://www.theinfatuation.com/new-york/reviews/buvette), [I Sodi](https://www.theinfatuation.com/new-york/reviews/i-sodi), and [Bar Pisellino](https://www.theinfatuation.com/new-york/reviews/bar-pisellino)) aren\u2019t exactly struggling to fill seats either. To merely call Via Carota busy would be an understatement. This restaurant\u2014decorated like an Italian farmhouse\u2014serves uniformly exceptional dishes like cacio e pepe, fried rabbit, and svizzerina. If you don\u2019t snag one of the limited reservations available 30 days out, it might be several hours until you\u2019re seated\u2014quite possibly next to someone who won an Oscar last year.\"\n    },\n    {\n      \"title\": \"10 Restaurants To Take Tourists To That Won\u2019t Make You Hate Yourself\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/tourist-restaurants-that-are-actually-good\",\n      \"position\": 3,\n      \"entry_name\": null,\n      \"blurb\": \"We don\u2019t know exactly why or how everyone who visits this city knows about Via Carota, but they do. And since you, us, and approximately eight million of our neighbors also know about this Italian spot in the West Village, the waits here can be laughably long (since they don\u2019t take reservations). So put your name on their list, check out a few places that come up when you search \u201cnearby bars,\u201d and maybe walk to that [trees-on-stilts](https://littleisland.org/) park you\u2019ve been meaning to check out. Before you know it, you\u2019ll be eating cacio e pepe tonarelli while thinking to yourself: \u201cThat wait wasn\u2019t so bad.\u201d\"\n    },\n    {\n      \"title\": \"13 To-Go Negronis You Can Order Today\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/to-go-negronis-nyc\",\n      \"position\": 10,\n      \"entry_name\": null,\n      \"blurb\": \"LIke I Sodi, Via Carota makes a delicious negroni. This adds up, considering both restaurants are owned by the same team. In addition to their menu of Italian food, they\u2019re selling a 6oz classic negroni you can pick-up or order for delivery. They also have outdoor seating available every day from 11am to 10pm in case you\u2019d like to sit under twinkle lights and later brag to your friends that you were in the presence of _the_ Via Carota salad.\"\n    },\n    {\n      \"title\": \"Baked By Melissa\u2019s Essential NYC Salads\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/baked-by-melissa-nyc-salad-guide\",\n      \"position\": 1,\n      \"entry_name\": null,\n      \"blurb\": \"\\\"Their little gem salad is just delicious. A little gem salad: if it's on the menu, I'm going to get it. I tend to make salads that have a lot of ingredients. A little gem, when done right, it's simple, it's delicious, it's crunchy, it's refreshing. It hits all the notes. I always wish I ordered more than one. Sometimes I do make everyone order their own because I want my own.\\\"\"\n    },\n    {\n      \"title\": \"Michael Imperioli's Favorite NYC Restaurants\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/michael-imperioli-nyc-restaurant-guide\",\n      \"position\": 7,\n      \"entry_name\": null,\n      \"blurb\": \"\u201cJody Williams is an old friend who my brother used to work with back when she was at Gusto, and Giorgione. Jody trained in [Rome](https://www.theinfatuation.com/rome/guides/best-rome-restaurants), so her pastas are incredible and authentic. She also makes one of the best green salads that tastes like a real Sunday Italian dinner\u2014an at-home green salad. It\u2019s very specific, very simple but flavorful, and it tastes like home. And that place has a good vibe, you know?\u201d\"\n    },\n    {\n      \"title\": \"The Best Italian Restaurants In NYC\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/best-italian-restaurants-nyc\",\n      \"position\": 3,\n      \"entry_name\": null,\n      \"blurb\": \"It's extremely hard to secure a reservation at Via Carota (one of [the best restaurants in NYC](https://www.theinfatuation.com/new-york/guides/best-restaurants-nyc)), and there's pretty much always a wait for walk-ins of two or more hours. Obviously, that's kind of annoying, but it doesn't deter us from eating here. This place manages to stick out among thousands of Italian restaurants in NYC by making food that\u2019s unfussy and uniformly delicious. A meal here should involve some of the dozen-plus vegetable dishes, the steak tartare-like svizzerina, and the cacio e pepe (which is non-optional).\"\n    },\n    {\n      \"title\": \"The Best Italian Restaurants In The West Village\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/best-italian-restaurant-west-village\",\n      \"position\": 1,\n      \"entry_name\": null,\n      \"blurb\": \"Via Carota is mostly walk-in-only, and every single night you\u2019ll find people lined up in the entryway, waiting for a table with a quiet desperation. Waits can be anywhere from one to three hours, and it confuses us emotionally to say that, yes, this place is worth a three-hour wait. The cacio e pepe is the best in the city, the garlicky chopped steak is richer and more compelling than the majority of non-chopped steaks, and sometimes you just feel like sitting in a dark room with taxidermy, rustic wooden cabinets, and the occasional actor who once starred alongside Scarlett Johansson.\"\n    },\n    {\n      \"title\": \"The Best Restaurants In The West Village\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/the-best-restaurants-in-the-west-village\",\n      \"position\": 1,\n      \"entry_name\": null,\n      \"blurb\": \"Via Carota is always busy, and there are several reasons why. First, the [Italian food](https://www.theinfatuation.com/new-york/guides/best-italian-restaurants-nyc) is exceptional\u2014especially the pasta, fried rabbit, and svizzerina. This restaurant also has an attractive space decorated like an Italian farmhouse, and you might see someone who\u2019s due for their first (or next) Oscar win. Limited reservations are available 30 days out, but if you don\u2019t snag one, you might be told to come back in several hours, so put your name on the list and get some drinks at one of the many [bars within walking distance](https://www.theinfatuation.com/new-york/guides/best-west-village-bars).\"\n    },\n    {\n      \"title\": \"The Best Walk-In Only Restaurants For Date Night (When You Didn\u2019t Make A Reservation)\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/walk-in-only-date-spots-no-reservations\",\n      \"position\": 8,\n      \"entry_name\": null,\n      \"blurb\": \"If your date hasn\u2019t been to Via Carota, it\u2019s the sort of place that will make anyone say, \u201cHow have I never been here?\u201d And if they have been here, then they\u2019ll think you have very good taste. The space is bigger than most West Village Italian spots and it\u2019s usually crowded with people drinking negronis and wine, and eating classic Italian pastas, vegetables, and mains. There will probably be a wait, but it\u2019s worth it.\"\n    },\n    {\n      \"title\": \"The Manhattan Date Night Delivery Guide\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/the-manhattan-date-night-delivery-guide\",\n      \"position\": 14,\n      \"entry_name\": null,\n      \"blurb\": \"Here\u2019s an easy-to-follow, three step guide to date night at home near the West Village: order from Via Carota on Grove Street, [whip up a martini while you wait](https://www.theinfatuation.com/cocktails/cocktails-how-to-make-a-martini), then eat pasta out of real bowls by candlelight. Our top choice available for delivery right now is the tonarelli cacio e pepe, which is extremely rich and cheesy, with chewy noodles and lots of pepper.\"\n    },\n    {\n      \"title\": \"The NYC Cold Brew, Burgers, & Omelets That Power Antoni Porowski\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/antoni-porowski-queer-eye-noho-west-village-restaurants\",\n      \"position\": 8,\n      \"entry_name\": null,\n      \"blurb\": \"\\\"I literally just came back from there. I had a really good radicchio treviso salad with currants and pine nuts where the greens were kind of wilted. It just takes away a bit of the bitterness. They really rinse the hell out of their bitter greens, which I love, because [the bitterness] is still there, but it's not overwhelming. Every bite is amazing, whether you're getting endive or fris\u00e9. They just get the best greens.\\\"\"\n    },\n    {\n      \"title\": \"The One-Two Punch Guide: Winter Edition\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/the-one-two-punch-guide-winter-edition\",\n      \"position\": 14,\n      \"entry_name\": null,\n      \"blurb\": \"Via Carota doesn\u2019t take reservations, and there are ocassionally waits of up to two hours. Fortunately, we just informed you of this - so now you can just come early and put your name in. Once you do that (and the host writes your name in chalk on a big metal pole), you can go grab a drink somewhere else. This place is just one room in the West Village with floor-to-ceiling windows and a bunch of two-person tables, and your date will probably think it\u2019s either cute, quaint, or both of these things. It also gets bonus points for having plenty of vegetarian options, and the pastas are reliably top-notch.\"\n    },\n    {\n      \"title\": \"Top 25: The Best Restaurants In NYC\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/best-restaurants-nyc\",\n      \"position\": 3,\n      \"entry_name\": null,\n      \"blurb\": \"Sometimes, we\u2019re wrong. It\u2019s rare, but it happens. Our initial review of Via Carota, for example, was pretty lukewarm. But that was back in 2015, a confusing time when bone broth was the beverage du jour and electric hoverboards were catching on fire. With its perfect mix of casual, buzzy atmosphere and impressive, unfussy food, this West Village restaurant has grown on us immensely over the years. It\u2019s one of our favorite [Italian](https://www.theinfatuation.com/new-york/guides/best-italian-restaurants-nyc) spots in Manhattan, slightly edging out the latest iteration of sister restaurant [I Sodi](https://www.theinfatuation.com/new-york/reviews/i-sodi), so swing by for some world-class cacio e pepe and a crisp, towering salad. Just be sure to arrive before 6pm. Via Carota is essentially walk-in only, with very limited reservations, and we aren\u2019t the only ones who love this place.\"\n    },\n    {\n      \"title\": \"Where Joe Jonas Goes For Pasta, Chicken Parm & Martinis In NYC\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/joe-jonas-favorite-nyc-restaurants\",\n      \"position\": 1,\n      \"entry_name\": null,\n      \"blurb\": \"\u201cI spend a lot of time in the West Village, and I love the people who do Via Carota and Buvette. I think they do a really great job. They\u2019re always at the top of the list of restaurants to go to when I\u2019m in town. There\u2019s incredible Italian at Via Carota. You really can\u2019t go wrong, just run down the menu, but you gotta get pasta, and they have a good wine selection.\u201d\"\n    },\n    {\n      \"title\": \"Where To Eat At The Bar Right Now In NYC\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/where-to-eat-at-the-bar-right-now-in-nyc\",\n      \"position\": 9,\n      \"entry_name\": null,\n      \"blurb\": \"Via Carota is a walk-in-only Italian restaurant in the West Village that has multiple-hour waits more often than not. But one of the benefits of eating alone is that you won\u2019t need to worry about that. Our strategy is to come at an off-hour on a weekend afternoon (around 2 or 3pm). Bring a book and get the big salad or toast with butter and anchovies, plus an order of the tonarelli cacio e pepe and a Negroni for good measure. Then wait about five minutes for the Negroni to kick in and sigh while you congratulate yourself on a life well-lived.\"\n    },\n    {\n      \"title\": \"Where To Eat Outside In The West Village\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/where-to-eat-outside-in-the-west-village\",\n      \"position\": 17,\n      \"entry_name\": null,\n      \"blurb\": \"The world is constantly changing, but there are two things you can pretty much always count on being true: You'll have to wait for a table Via Carota, and it\u2019ll be worth it once the food arrives. Get a table on the sidewalk at this West Village Italian restaurant, order the chopped steak, and spread the roasted garlic cloves over it.\"\n    },\n    {\n      \"title\": \"Where To Get Some Pasta And A Glass Of Wine By Yourself\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/pasta-wine-solo-dinner-nyc\",\n      \"position\": 12,\n      \"entry_name\": null,\n      \"blurb\": \"Via Carota is a walk-in-only restaurant in the West Village that occasionally has multiple-hour waits. But one of the benefits of eating alone is that you won\u2019t need to worry about that. Definitely consider their pasta special\u2014in the past, we\u2019ve had a really good pappardelle with butter and prosciutto.\"\n    },\n    {\n      \"title\": \"Where To Go When You Can\u2019t Get Into Lilia\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/italian-restaurants-like-lilia-nyc\",\n      \"position\": 9,\n      \"entry_name\": null,\n      \"blurb\": \"Via Carota has always been tough to get into, and it seems to get more popular every year. They take some reservations now, but those are usually impossible to get\u2014so just stop by and put your name in for a table. Will you have to wait two to three hours? Probably. But so will everyone else. Hang out at [Marie's Crisis](https://www.theinfatuation.com/new-york/reviews/maries-crisis-cafe) or [Bar Pisellino](https://www.theinfatuation.com/new-york/reviews/bar-pisellino) until you get a text informing you that you're now allowed to eat. The cacio e pepe is essential, as is the chopped steak.\"\n    },\n    {\n      \"title\": \"Where To Go When You Don\u2019t Want To Make A Big Deal About Your Anniversary\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/where-to-go-when-you-dont-want-to-make-a-big-deal-about-your-anniversary\",\n      \"position\": 3,\n      \"entry_name\": null,\n      \"blurb\": \"The ultimate gesture of love would be to put your name down at Via Carota at 5pm and then go back to your apartment to tell your partner they won\u2019t have to wait impatiently for several hours on the sidewalk to eat here. Once you eat Via Carota\u2019s grilled artichokes, chopped steak, and legally-required cacio e pepe, you\u2019ll have likely decided this is your new anniversary tradition. But you should alternate who has to go put a name down every year.\"\n    },\n    {\n      \"title\": \"Where To Hang Out Near 14 Restaurants With Long Waits\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/restaurants-with-long-waits-nyc-nearby-bars\",\n      \"position\": 12,\n      \"entry_name\": null,\n      \"blurb\": \"**The Waiting Room:** [Bar Pisellino](https://www.theinfatuation.com/new-york/reviews/bar-pisellino)\\n\\n**The Back-Up Plan:** [Marie\u2019s Crisis Cafe](https://www.theinfatuation.com/new-york/reviews/maries-crisis-cafe)\\n\\nThe team behind Via Carota and nearby [I Sodi](https://www.theinfatuation.com/new-york/reviews/i-sodi) essentially opened a bar to deal with their overflow, and for that we are thankful. [Bar Pisellino](https://www.theinfatuation.com/new-york/reviews/bar-pisellino) in the West Village is within a block of both Italian spots, and it's a picture perfect spot for a spritz and some arancini. Like its restaurant counterparts, this place can get pretty packed with everybody else who\u2019s also waiting patiently for their insalata verde. If there\u2019s a wait for the waiting room, head to [Marie\u2019s Crisis Cafe](https://www.theinfatuation.com/new-york/reviews/maries-crisis-cafe) and sing some show tunes at the divey piano bar instead.\"\n    },\n    {\n      \"title\": \"Where To Have Your 30th Birthday\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/30th-birthday-ideas-nyc-birthday-restaurants\",\n      \"position\": 3,\n      \"entry_name\": null,\n      \"blurb\": \"If your soul searching about your 30th birthday party has resulted in your quest for a \u201cnice place\u201d for a \u201ccozy dinner\u201d with some of your \u201cclosest friends,\u201d you should consider Via Carota. It\u2019s an upscale neighborhood Italian place in the West Village, with both a small private room and a large communal table in the dining room that would be great for an intimate dinner with some friends. Get drunk on negronis and pasta and then walk over to any of the nearby bars (Employees Only, Highlands, The Garrett) for a very solid birthday one-two punch.\"\n    },\n    {\n      \"title\": \"Where To Take Someone Who Just Wants To See A Celebrity\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/celebrity-sighting-restaurants-nyc\",\n      \"position\": 5,\n      \"entry_name\": null,\n      \"blurb\": \"Famous people like eating at Via Carota. But not because it\u2019s a party or scene. (Technically it\u2019s the latter, but it definitely isn\u2019t the former.) Via Carota is popular because it\u2019s one of the [best Italian restaurants](https://www.theinfatuation.com/new-york/guides/best-italian-restaurants-nyc) in NYC, and the food is consistently excellent. This place is also in the [West Village](https://www.theinfatuation.com/new-york/guides/the-best-restaurants-in-the-west-village), which doesn\u2019t hurt (see below). Nowadays, this dark, casual, farmhouse-like spot takes some reservations, but it\u2019s still pretty much [walk-in-only](https://www.theinfatuation.com/new-york/guides/walk-in-only-restaurants). You\u2019re going to have to wait several hours for your table, but once you get seated, you might see Adam Driver eating tonarelli.\"\n    }\n  ]\n}"
+          }
+        ]
+      },
+      "jsonrpc": "2.0",
+      "id": "reg1-f-002"
+    }
+  },
+  {
+    "id": "f-003",
+    "envelope": {
+      "jsonrpc": "2.0",
+      "id": "reg1-f-003",
+      "method": "tools/call",
+      "params": {
+        "name": "get_restaurant",
+        "arguments": {
+          "city": "new-york",
+          "id": "Lilia"
+        }
+      }
+    },
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n  \"id\": \"bb1403b1-9268-4322-8827-92cc8e7ecaac\",\n  \"name\": \"Lilia\",\n  \"match_type\": \"exact\",\n  \"crawled_at\": \"2026-09-19T19:08:49.100Z\",\n  \"rating\": 8.9,\n  \"price_tier\": 3,\n  \"price_label\": \"EXPENSIVE\",\n  \"neighborhood\": \"Williamsburg\",\n  \"address\": {\n    \"line1\": \"567 Union Avenue\",\n    \"locality\": \"Brooklyn\",\n    \"region\": \"NY\",\n    \"postal_code\": \"11211\",\n    \"latitude\": 40.7174888933,\n    \"longitude\": -73.9523563253\n  },\n  \"phone\": \"(718) 576-3095\",\n  \"website\": \"http://www.lilianewyork.com\",\n  \"reservation\": {\n    \"url\": \"https://resy.com/cities/new-york-ny/venues/lilia?seats=2\",\n    \"platform\": \"RESY\"\n  },\n  \"booking\": {\n    \"policy\": \"reservations-recommended\",\n    \"notes\": \"There\u2019s one very important thing to keep in mind when it comes to getting a table at Lilia: They take reservations over the phone. In fact, it\u2019s easier to get a table over the phone. Reservations are released 30 days in advance at 10am, and whatever isn\u2019t booked over the phone\u2026\"\n  },\n  \"closed\": false,\n  \"source_url\": \"https://theinfatuation.com/new-york/reviews/lilia\",\n  \"review\": {\n    \"title\": \"Lilia\",\n    \"headline\": \"At Williamsburg's Lilia, it was never about the hype\",\n    \"summary\": \"Williamsburg\u2019s Lilia has become the overachieving neighborhood Italian spot it was always meant to be. \",\n    \"author\": \"Bryan Kim\",\n    \"published_at\": \"2025-04-25T15:00:00.000Z\",\n    \"url\": \"https://theinfatuation.com/new-york/reviews/lilia\"\n  },\n  \"tags\": {\n    \"cuisine\": [\n      \"Italian\",\n      \"Pasta\"\n    ],\n    \"neighborhood\": [\n      \"Williamsburg\"\n    ],\n    \"occasion\": [\n      \"Date Nights\"\n    ]\n  },\n  \"guide_appearances\": [\n    {\n      \"title\": \"10 Great Queer-Owned Restaurants In NYC\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/best-queer-owned-restaurants-nyc\",\n      \"position\": 10,\n      \"entry_name\": null,\n      \"blurb\": \"Occasionally, we think to ourselves: \u201cMaybe Lilia is easier to get into now.\u201d And we\u2019re always disappointed. But Missy Robbins\u2019 perfectly cooked, modern Italian food is totally worth it when you [finally score a table](https://www.theinfatuation.com/new-york/guides/toughest-restaurant-reservations-nyc). Our favorite way to experience this whitewashed, warehouse-like space is by grabbing a few seats at the bar. Start with a negroni and an order of squishy focaccia, and be sure to get the agnolotti and cacio e pepe-style mafaldini.\"\n    },\n    {\n      \"title\": \"12 Restaurants Perfect For Literally Everyone\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/12-restaurants-perfect-for-literally-everyone\",\n      \"position\": 2,\n      \"entry_name\": null,\n      \"blurb\": \"Lilia is important because it proved that a big, beautiful restaurant designed for grown-ups (the kind you\u2019d expect to find in Manhattan) could exist in Brooklyn. Another reason? It\u2019s important without _feeling_ important - there\u2019s nothing stuffy or pretentious or overly fancy about it. It\u2019s just a place where you know you\u2019re going to stuff your face with pasta and wine and Negronis, and feel excellent while doing so.\"\n    },\n    {\n      \"title\": \"14 Places To Take A Fairly Famous Instagrammer\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/places-to-take-a-fairly-famous-instagrammer\",\n      \"position\": 8,\n      \"entry_name\": null,\n      \"blurb\": \"The food alone is enough to make Lilia one of NYC's best restaurants, but the giant windows and white washed walls also make it one of the best places to take a picture of food as well. Now you'll just have to find out how fairly famous one needs to be to get a table here.\"\n    },\n    {\n      \"title\": \"19 Previously Impossible Reservations That Are Easier Now\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/previously-impossible-reservations-you-can-get-now\",\n      \"position\": 13,\n      \"entry_name\": null,\n      \"blurb\": \"**How far in advance should you book? **Four weeks, but check same-day availability too.\\n\\nWe used to spend a few hours every week fielding questions on how to get into Lilia. The Williamsburg restaurant\u2019s reservations page was perpetually barren. Then something strange happened. We started seeing tables available\u2014mostly for dates four weeks out, but same-day ones as well. Eat at 5:15pm if you have to. The signature grilled clams and honey-drizzled agnolotti are worth it.\"\n    },\n    {\n      \"title\": \"39 Places For Date Night Outside\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/outdoor-best-date-restaurants-nyc\",\n      \"position\": 13,\n      \"entry_name\": null,\n      \"blurb\": \"Lilia has a good amount of cafe seating right on the sidewalk. Which means that you can bring a date here, then point to the crowds waiting by the front door in order to prove how hard it is to get a reservation here. And the food will only make you seem more impressive. Get some cacio e pepe fritters, some pasta, some grilled clams, and (we\u2019ll rarely tell you this) don\u2019t fill up on dinner. You should get desserts here. Also, make sure you really like the person you\u2019re bringing because A) this place isn\u2019t cheap and B) you\u2019ll want to fully enjoy these memories.\"\n    },\n    {\n      \"title\": \"New York City\u2019s Best New Restaurants Of 2016\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/nycs-best-new-restaurants-of-2016\",\n      \"position\": 3,\n      \"entry_name\": null,\n      \"blurb\": \"There are select moments in life that call for bringing out the Big Guns. Important dates, anniversaries, birthdays, dinner with parents who still aren\u2019t convinced you\u2019re a successful adult - these times call for a restaurant that, in both food and vibe, will blow all parties away. Lilia is such a restaurant. Make a reservation (no one is impressed by two-hour waits), fill your table with simple, excellent pastas, order a negroni or three, and you\u2019ll be in one of the greatest setups we have in this town.\"\n    },\n    {\n      \"title\": \"The Best Italian Restaurants In NYC\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/best-italian-restaurants-nyc\",\n      \"position\": 5,\n      \"entry_name\": null,\n      \"blurb\": \"There are a ton of Italian restaurants in Brooklyn, but there\u2019s nothing else like Lilia. The space feels like a glamorous, whitewashed warehouse, and their modern Italian food is always perfectly executed. While this place is great for special occasion dates and impressing out-of-towners, our favorite way to eat here is by grabbing a few seats at the bar. Start with a Negroni and an order of squishy focaccia, and plan to go deep on pastas. The agnolotti is a required order, and the cacio e pepe-style mafaldini should be in front of you as well.\"\n    },\n    {\n      \"title\": \"The Best Pasta In NYC\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/best-pasta-nyc\",\n      \"position\": 2,\n      \"entry_name\": null,\n      \"blurb\": \"It happened. You did it. You finally got a reservation at Lilia in Williamsburg. Build your order around as much pasta as possible. The mafaldini with pink peppercorns is one of the most refreshing pastas in Brooklyn, but you can't go wrong. The pastas are made in-house and accented with wood-fired meats and extremely good cheese.\"\n    },\n    {\n      \"title\": \"The Best Restaurants For Special Occasions In NYC\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/special-occasion-date-night-restaurants\",\n      \"position\": 22,\n      \"entry_name\": null,\n      \"blurb\": \"Coming to Lilia in Williamsburg grants you access to a special society: those who have eaten at the city\u2019s most exclusive Italian restaurants. Once you sit down, though, Lilia\u2019s industrial-looking space feels nothing like a glitzy club where diners hope they get blue Instagram checks with dessert\u2014instead, the restaurant is a temple of simplicity in pasta. Besides the occasional addition of shrimp or squid to a fra diavolo, you\u2019ll find bare bones near-perfection here. As an added bonus, you can tell your friends you had your anniversary at Lilia.\"\n    },\n    {\n      \"title\": \"The Best Restaurants In Williamsburg\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/best-williamsburg-restaurants\",\n      \"position\": 2,\n      \"entry_name\": null,\n      \"blurb\": \"Open since 2016, Lilia feels like a glamorous, whitewashed warehouse, and their modern [Italian](https://www.theinfatuation.com/new-york/guides/best-italian-restaurants-nyc) food is always perfectly executed. While this place is great for special occasion dates and impressing out-of-towners, our favorite way to eat here is by grabbing a few seats at the bar. Start with a Negroni and an order of squishy focaccia, and be sure to get the agnolotti and cacio e pepe-style mafaldini.\"\n    },\n    {\n      \"title\": \"The Best Restaurants Where You Can Bring Your Own Wine\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/corkage-restaurants-nyc-bring-your-own-wine\",\n      \"position\": 16,\n      \"entry_name\": null,\n      \"blurb\": \"Whoever you\u2019re bringing to Lilia should already be impressed by the fact that you got a reservation, but if you want to go one step further, open a bottle of Sicilian chardonnay with the sheep\u2019s-milk-cheese-filled agnolotti.\\n\\nCorkage: $35 per bottle.\"\n    },\n    {\n      \"title\": \"The Soft Serve Map\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/soft-serve-nyc-ice-cream-map\",\n      \"position\": 24,\n      \"entry_name\": null,\n      \"blurb\": \"Lilia\u2019s dessert is just as good as their pasta, and their soft serve gelato is something truly special. They do a chocolate and vanilla version (each with their own set of toppings), but the dessert that we wish we were eating most nights is their vanilla gelato with lemon ice. Important: you can get it in their back cafe, without having to wait two hours for a table in the main restaurant. This should be your next date-night nightcap.\"\n    },\n    {\n      \"title\": \"Where To Eat Outside In Williamsburg\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/where-to-eat-outside-in-williamsburg-nyc\",\n      \"position\": 6,\n      \"entry_name\": null,\n      \"blurb\": \"Lilia isn\u2019t accepting walk-ins, which saves you the trouble of thinking \u201cthis\u2019ll be the night,\u201d only to be told that the waitlist filled up five minutes after they opened. If you do manage to reserve one of their outdoor tables online, which are available Wednesday through Sunday from 5-10pm, then you\u2019ll be able to get the same fantastic sheep\u2019s milk agnolotti and grilled clams as you would have if you\u2019d ever gotten off the waitlist in the past.\"\n    },\n    {\n      \"title\": \"Where To Get A Spontaneous Dinner Outside\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/best-outdoor-dining-nyc\",\n      \"position\": 4,\n      \"entry_name\": null,\n      \"blurb\": \"If you haven\u2019t been to Lilia yet, it\u2019s probably because you\u2019re not into the idea of staying up until 12:01am to try to make a reservation, and you\u2019re even less into the idea of trying your luck at a walk-in only to be told you\u2019re not getting in tonight. Which is exactly why you should file it in away in your brain for a spontaneous occasion. On a summer evening when you get off work early - or on a weekend when you\u2019re down to eat on a geriatric schedule - head over to this incredible modern Italian restaurant. They open at 5:30pm, and if you get there in the first hour, you have an excellent shot at sitting on their plentiful sidewalk seating. Stop making excuses and just go eat here. You will not regret it.\"\n    },\n    {\n      \"title\": \"Where To Get Some Pasta And A Glass Of Wine By Yourself\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/pasta-wine-solo-dinner-nyc\",\n      \"position\": 1,\n      \"entry_name\": null,\n      \"blurb\": \"Lilia\u2019s host once informed us that the surest way to book a prime time reservation is to call 30 days in advance at 10am sharp. This was obviously upsetting to hear, since we don\u2019t even schedule vacations a month in advance. But we've found that it isn\u2019t too hard to finagle a bar seat by showing up ready to wait or by calling on the early side of the day you'd like to go. (And we firmly believe the bar area is the most idyllic spot in the house.)\u00a0Order the sheep's milk cheese filled agnolotti, also known as Lilia\u2019s Nobel Pasta Prize. It\u2019s the dish most people order, and there's a good reason why. Glossy tubes are filled to the gills with uniformly smooth sheep\u2019s milk, sitting in a honey-saffron butter sauce. The whole thing tastes earthy somehow. Consider this the glamping of pastas.\"\n    },\n    {\n      \"title\": \"Where To Hang Out Near 14 Restaurants With Long Waits\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/restaurants-with-long-waits-nyc-nearby-bars\",\n      \"position\": 7,\n      \"entry_name\": null,\n      \"blurb\": \"**The Waiting Room:** [Mr. Melo](https://www.theinfatuation.com/new-york/reviews/mr-melo)\\n\\n**The Back-Up Plan:** [Rocka Rolla](https://www.theinfatuation.com/new-york/reviews/rocka-rolla)\\n\\nWe have no idea how long it\u2019ll take for you to get seated as a walk-in at this legendary Williamsburg Italian restaurant. Seriously, your guess is as good as ours. But instead of agonizing over your future table, might we suggest a vinyl listening bar? [Mr. Melo](https://www.theinfatuation.com/new-york/reviews/mr-melo) is a four-minute walk away, and it\u2019s where you should listen to some calming music and drink a feta brine martini. Alternatively, consider caffeine. Alcoholic caffeine, in the form of [Rocka Rolla](https://www.theinfatuation.com/new-york/reviews/rocka-rolla)\u2019s Coffee Drink, which is sort of like a Frosty with brown liquor. That\u2019ll keep you wide awake and ready for a dainty bowl of pink peppercorn pasta.\"\n    },\n    {\n      \"title\": \"Where To Have A Birthday Outside\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/outdoor-birthday-restaurants-nyc\",\n      \"position\": 17,\n      \"entry_name\": null,\n      \"blurb\": \"While incredibly hard to book, we guarantee that you won\u2019t regret sitting at one of Lilia\u2019s outdoor tables and eating sheep milk-filled agnolotti on your birthday. This Williamsburg Italian spot has a bunch of private yurts on the giant triangular sidewalk it calls \u201cLilia Beach\u201d, giving you plenty of privacy to eat your cacio e pepe frittelle in peace without feeling like the diners right next to you are watching your every bite.\"\n    },\n    {\n      \"title\": \"Where To Have Your 50th Birthday Dinner\",\n      \"url\": \"https://www.theinfatuation.com/new-york/guides/50th-birthday-restaurants-nyc\",\n      \"position\": 3,\n      \"entry_name\": null,\n      \"blurb\": \"If you want to get into Lilia, you need to book about a month in advance. But fortunately, you\u2019ve known for roughly 50 years when your 50th birthday would be. This is, hands down, the best Italian restaurant in Williamsburg, and you\u2019re here to eat some exceptional agnolotti with a side of baked clams and some cacio e pepe fritters. Don\u2019t ignore the other small plates on the menu, and be sure to get some olive oil cake for dessert. Your friends are very nice people and they care about you, but they probably won\u2019t bake a better cake.\"\n    }\n  ]\n}"
+          }
+        ]
+      },
+      "jsonrpc": "2.0",
+      "id": "reg1-f-003"
+    }
+  },
+  {
+    "id": "f-004",
+    "envelope": {
+      "jsonrpc": "2.0",
+      "id": "reg1-f-004",
+      "method": "tools/call",
+      "params": {
+        "name": "get_restaurant",
+        "arguments": {
+          "city": "new-york",
+          "id": "00000000-0000-0000-0000-000000000000"
+        }
+      }
+    },
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n  \"found\": false,\n  \"query\": \"00000000-0000-0000-0000-000000000000\",\n  \"suggestions\": []\n}"
+          }
+        ]
+      },
+      "jsonrpc": "2.0",
+      "id": "reg1-f-004"
+    }
+  },
+  {
+    "id": "f-005",
+    "envelope": {
+      "jsonrpc": "2.0",
+      "id": "reg1-f-005",
+      "method": "tools/call",
+      "params": {
+        "name": "compare_restaurants",
+        "arguments": {
+          "city": "new-york",
+          "restaurants": [
+            "Lilia",
+            "Lilia"
+          ]
+        }
+      }
+    },
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "[\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"query\": \"Lilia\",\n    \"found\": true,\n    \"id\": \"bb1403b1-9268-4322-8827-92cc8e7ecaac\",\n    \"name\": \"Lilia\",\n    \"rating\": 8.9,\n    \"price_tier\": 3,\n    \"neighborhood\": \"Williamsburg\",\n    \"cuisines\": [\n      \"Italian\",\n      \"Pasta\"\n    ],\n    \"good_for\": [\n      \"Date Nights\"\n    ],\n    \"reservation\": {\n      \"url\": \"https://resy.com/cities/new-york-ny/venues/lilia?seats=2\",\n      \"platform\": \"RESY\"\n    },\n    \"booking\": {\n      \"policy\": \"reservations-recommended\",\n      \"notes\": \"There\u2019s one very important thing to keep in mind when it comes to getting a table at Lilia: They take reservations over the phone. In fact, it\u2019s easier to get a table over the phone. Reservations are released 30 days in advance at 10am, and whatever isn\u2019t booked over the phone\u2026\"\n    },\n    \"closed\": false,\n    \"review_headline\": \"At Williamsburg's Lilia, it was never about the hype\",\n    \"guide_appearances\": 21\n  }\n]"
+          }
+        ]
+      },
+      "jsonrpc": "2.0",
+      "id": "reg1-f-005"
+    }
+  },
+  {
+    "id": "f-006",
+    "envelope": {
+      "jsonrpc": "2.0",
+      "id": "reg1-f-006",
+      "method": "tools/call",
+      "params": {
+        "name": "guide_consensus",
+        "arguments": {
+          "city": "new-york",
+          "theme": "cookies"
+        }
+      }
+    },
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "[\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"9d43c7b7-cbfb-4727-ba27-b5b344c004ba\",\n    \"name\": \"Orwashers Bakery\",\n    \"rating\": null,\n    \"price_tier\": 1,\n    \"neighborhoods\": [\n      \"Upper East Side\"\n    ],\n    \"is_closed\": 0,\n    \"guide_count\": 2\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"bf5599e0-8fa4-49a0-be81-bff0f79583ac\",\n    \"name\": \"The Pastry Box\",\n    \"rating\": null,\n    \"price_tier\": 1,\n    \"neighborhoods\": [\n      \"East Village\"\n    ],\n    \"is_closed\": 0,\n    \"guide_count\": 2\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"408429cc-1a01-4f09-874c-91ca827fa289\",\n    \"name\": \"Red Hook Tavern\",\n    \"rating\": 9,\n    \"price_tier\": 3,\n    \"neighborhoods\": [\n      \"Red Hook\"\n    ],\n    \"is_closed\": 0,\n    \"guide_count\": 1\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"20556951-2be7-43ba-af46-c7bd6d2c1814\",\n    \"name\": \"The Fly\",\n    \"rating\": 8.7,\n    \"price_tier\": 2,\n    \"neighborhoods\": [\n      \"Bedford-Stuyvesant\"\n    ],\n    \"is_closed\": 0,\n    \"guide_count\": 1\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"1f1e64bb-5f34-466d-9f2b-c6bb2c025390\",\n    \"name\": \"Ihawan\",\n    \"rating\": 8.6,\n    \"price_tier\": 2,\n    \"neighborhoods\": [\n      \"Woodside\"\n    ],\n    \"is_closed\": 0,\n    \"guide_count\": 1\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"0a7fca20-af77-48bc-976e-b894f4e1f7c3\",\n    \"name\": \"Barney Greengrass\",\n    \"rating\": 8.4,\n    \"price_tier\": 2,\n    \"neighborhoods\": [\n      \"Upper West Side\"\n    ],\n    \"is_closed\": 0,\n    \"guide_count\": 1\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"a4e25592-1bfb-441e-9565-f907f259e0b3\",\n    \"name\": \"Cote\",\n    \"rating\": 8.4,\n    \"price_tier\": 3,\n    \"neighborhoods\": [\n      \"Flatiron\"\n    ],\n    \"is_closed\": 0,\n    \"guide_count\": 1\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"263cd797-b03a-409d-858d-e430b8d1e04b\",\n    \"name\": \"Gramercy Tavern\",\n    \"rating\": 8.3,\n    \"price_tier\": 4,\n    \"neighborhoods\": [\n      \"Gramercy\"\n    ],\n    \"is_closed\": 0,\n    \"guide_count\": 1\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"f54dc111-8b49-4116-a091-9387b8bac0ac\",\n    \"name\": \"Russ & Daughters\",\n    \"rating\": 8.3,\n    \"price_tier\": 2,\n    \"neighborhoods\": [\n      \"Lower East Side\"\n    ],\n    \"is_closed\": 0,\n    \"guide_count\": 1\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"d49211d6-671b-485a-ad51-5152eaa966c9\",\n    \"name\": \"Ruffian\",\n    \"rating\": 8.2,\n    \"price_tier\": 3,\n    \"neighborhoods\": [\n      \"East Village\"\n    ],\n    \"is_closed\": 0,\n    \"guide_count\": 1\n  }\n]"
+          }
+        ]
+      },
+      "jsonrpc": "2.0",
+      "id": "reg1-f-006"
+    }
+  },
+  {
+    "id": "f-007",
+    "envelope": {
+      "jsonrpc": "2.0",
+      "id": "reg1-f-007",
+      "method": "tools/call",
+      "params": {
+        "name": "compare_restaurants",
+        "arguments": {
+          "city": "new-york",
+          "restaurants": [
+            "L'Industrie",
+            "Lilia"
+          ]
+        }
+      }
+    },
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "[\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"query\": \"L'Industrie\",\n    \"found\": true,\n    \"id\": \"afd434b6-10c3-4a9d-b3f5-99b81ea5bb45\",\n    \"name\": \"L'Industrie\",\n    \"rating\": null,\n    \"price_tier\": null,\n    \"neighborhood\": \"New York\",\n    \"cuisines\": [],\n    \"good_for\": [],\n    \"reservation\": null,\n    \"booking\": null,\n    \"closed\": false,\n    \"review_headline\": null,\n    \"guide_appearances\": 3\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"query\": \"Lilia\",\n    \"found\": true,\n    \"id\": \"bb1403b1-9268-4322-8827-92cc8e7ecaac\",\n    \"name\": \"Lilia\",\n    \"rating\": 8.9,\n    \"price_tier\": 3,\n    \"neighborhood\": \"Williamsburg\",\n    \"cuisines\": [\n      \"Italian\",\n      \"Pasta\"\n    ],\n    \"good_for\": [\n      \"Date Nights\"\n    ],\n    \"reservation\": {\n      \"url\": \"https://resy.com/cities/new-york-ny/venues/lilia?seats=2\",\n      \"platform\": \"RESY\"\n    },\n    \"booking\": {\n      \"policy\": \"reservations-recommended\",\n      \"notes\": \"There\u2019s one very important thing to keep in mind when it comes to getting a table at Lilia: They take reservations over the phone. In fact, it\u2019s easier to get a table over the phone. Reservations are released 30 days in advance at 10am, and whatever isn\u2019t booked over the phone\u2026\"\n    },\n    \"closed\": false,\n    \"review_headline\": \"At Williamsburg's Lilia, it was never about the hype\",\n    \"guide_appearances\": 21\n  }\n]"
+          }
+        ]
+      },
+      "jsonrpc": "2.0",
+      "id": "reg1-f-007"
+    }
+  },
+  {
+    "id": "f-008",
+    "envelope": {
+      "jsonrpc": "2.0",
+      "id": "reg1-f-008",
+      "method": "tools/call",
+      "params": {
+        "name": "find_similar",
+        "arguments": {
+          "city": "new-york",
+          "id": "Lilia",
+          "limit": 10
+        }
+      }
+    },
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "[\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"49d3919c-1e50-484c-aed4-cc1ca8da78a4\",\n    \"name\": \"Via Carota\",\n    \"rating\": 9.5,\n    \"price_tier\": 3,\n    \"neighborhood\": \"West Village\",\n    \"similarity\": 18,\n    \"shared_guides\": 4\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"1918a9a9-35be-4a5f-881c-88d38ec10ca9\",\n    \"name\": \"L'Artusi\",\n    \"rating\": 8.5,\n    \"price_tier\": 3,\n    \"neighborhood\": \"West Village\",\n    \"similarity\": 18,\n    \"shared_guides\": 4\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"98142683-4a79-4b39-b57a-77f96202a3f6\",\n    \"name\": \"Misi\",\n    \"rating\": 8.6,\n    \"price_tier\": 3,\n    \"neighborhood\": \"Williamsburg\",\n    \"similarity\": 17,\n    \"shared_guides\": 4\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"84da16e5-b0ca-4d48-b78a-009f56ec8fbf\",\n    \"name\": \"LaRina Pastificio & Vino\",\n    \"rating\": 8.3,\n    \"price_tier\": 2,\n    \"neighborhood\": \"Fort Greene\",\n    \"similarity\": 14,\n    \"shared_guides\": 4\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"71faa1ea-1847-4a7c-b24b-72c8b5abdfdd\",\n    \"name\": \"Torrisi Bar & Restaurant\",\n    \"rating\": 8.9,\n    \"price_tier\": 3,\n    \"neighborhood\": \"Nolita\",\n    \"similarity\": 13,\n    \"shared_guides\": 3\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"a56a7293-e510-4ade-8175-7f20d2af1f77\",\n    \"name\": \"Borgo\",\n    \"rating\": 8.6,\n    \"price_tier\": 3,\n    \"neighborhood\": \"Nomad\",\n    \"similarity\": 13,\n    \"shared_guides\": 3\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"74b906a7-69bb-4c5e-be2f-59e460e20d9b\",\n    \"name\": \"Don Angie\",\n    \"rating\": 8.4,\n    \"price_tier\": 3,\n    \"neighborhood\": \"West Village\",\n    \"similarity\": 13,\n    \"shared_guides\": 3\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"1494827b-052c-4569-af7e-d4033fd653e9\",\n    \"name\": \"Fiaschetteria Pistoia\",\n    \"rating\": 7.9,\n    \"price_tier\": 2,\n    \"neighborhood\": \"West Village\",\n    \"similarity\": 13,\n    \"shared_guides\": 2\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"3306fa86-0b95-4366-8e3b-3258251ce6d0\",\n    \"name\": \"The Four Horsemen\",\n    \"rating\": 8.8,\n    \"price_tier\": 3,\n    \"neighborhood\": \"Williamsburg\",\n    \"similarity\": 12,\n    \"shared_guides\": 3\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"e5df0969-f9e2-4a31-81a8-74dd49a2a636\",\n    \"name\": \"I Cavallini\",\n    \"rating\": 8.5,\n    \"price_tier\": 2,\n    \"neighborhood\": \"Williamsburg\",\n    \"similarity\": 12,\n    \"shared_guides\": 2\n  }\n]"
+          }
+        ]
+      },
+      "jsonrpc": "2.0",
+      "id": "reg1-f-008"
+    }
+  },
+  {
+    "id": "f-009",
+    "envelope": {
+      "jsonrpc": "2.0",
+      "id": "reg1-f-009",
+      "method": "tools/call",
+      "params": {
+        "name": "get_restaurant",
+        "arguments": {
+          "city": "new-york",
+          "id": "Contra"
+        }
+      }
+    },
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n  \"id\": \"e9d94966-7bfd-42c6-a3e9-2502adc2d401\",\n  \"name\": \"Contrasto\",\n  \"match_type\": \"fuzzy\",\n  \"crawled_at\": \"2026-09-19T17:15:59.233Z\",\n  \"rating\": null,\n  \"price_tier\": 1,\n  \"price_label\": \"INEXPENSIVE\",\n  \"neighborhood\": \"Greenpoint\",\n  \"address\": {\n    \"line1\": \"82 Dobbin St\",\n    \"locality\": \"Brooklyn\",\n    \"region\": \"New York\",\n    \"postal_code\": \"11222\",\n    \"latitude\": 40.7249151,\n    \"longitude\": -73.9542436\n  },\n  \"phone\": \"\",\n  \"website\": \"https://contrasto.nyc/\",\n  \"reservation\": null,\n  \"booking\": null,\n  \"closed\": false,\n  \"source_url\": \"https://theinfatuation.com/new-york/reviews/contrasto\",\n  \"review\": null,\n  \"tags\": {\n    \"cuisine\": [\n      \"Coffee\"\n    ],\n    \"neighborhood\": [\n      \"Greenpoint\"\n    ]\n  },\n  \"guide_appearances\": []\n}"
+          }
+        ]
+      },
+      "jsonrpc": "2.0",
+      "id": "reg1-f-009"
+    }
+  },
+  {
+    "id": "f-010a",
+    "envelope": {
+      "jsonrpc": "2.0",
+      "id": "reg1-f-010a",
+      "method": "tools/call",
+      "params": {
+        "name": "get_restaurant",
+        "arguments": {
+          "city": "new-york",
+          "id": "Cenadou"
+        }
+      }
+    },
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "{\n  \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n  \"id\": \"65410fe7-0947-404c-8f65-c6eed67182fe\",\n  \"name\": \"Cenadou\",\n  \"match_type\": \"exact\",\n  \"crawled_at\": \"2026-09-19T19:13:09.406Z\",\n  \"rating\": 8.2,\n  \"price_tier\": 3,\n  \"price_label\": \"EXPENSIVE\",\n  \"neighborhood\": \"Westchester\",\n  \"address\": {\n    \"line1\": \"721 Titicus Rd\",\n    \"locality\": \"North Salem\",\n    \"region\": \"NY\",\n    \"postal_code\": \"10560\",\n    \"latitude\": 41.337046,\n    \"longitude\": -73.563263\n  },\n  \"phone\": \"(914) 485-1519\",\n  \"website\": \"https://labastidebyac.com/cenadou\",\n  \"reservation\": {\n    \"url\": \"https://resy.com/cities/north-salem-ny/venues/cenadou\",\n    \"platform\": \"RESY\"\n  },\n  \"booking\": null,\n  \"closed\": false,\n  \"source_url\": \"https://theinfatuation.com/new-york/reviews/cenadou\",\n  \"review\": {\n    \"title\": \"Cenadou\",\n    \"headline\": null,\n    \"summary\": \"Cenadou is a French farmhouse spot in North Salem where you might end up eating next to Martha Stewart.\",\n    \"author\": \"Mike Wasserman\",\n    \"published_at\": \"2025-08-12T15:00:00.000Z\",\n    \"url\": \"https://theinfatuation.com/new-york/reviews/cenadou\"\n  },\n  \"tags\": {\n    \"cuisine\": [\n      \"French\"\n    ],\n    \"neighborhood\": [\n      \"Westchester\"\n    ],\n    \"occasion\": [\n      \"Date Nights\",\n      \"See & Be Seen\"\n    ]\n  },\n  \"guide_appearances\": []\n}"
+          }
+        ]
+      },
+      "jsonrpc": "2.0",
+      "id": "reg1-f-010a"
+    }
+  },
+  {
+    "id": "f-010b",
+    "envelope": {
+      "jsonrpc": "2.0",
+      "id": "reg1-f-010b",
+      "method": "tools/call",
+      "params": {
+        "name": "search_restaurants",
+        "arguments": {
+          "city": "new-york",
+          "query": "industrie"
+        }
+      }
+    },
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "[\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"f0c3b727-4128-4106-b33d-e06aedfb5fe4\",\n    \"name\": \"L'industrie Pizzeria\",\n    \"rating\": 9,\n    \"price_tier\": 1,\n    \"price_label\": \"INEXPENSIVE\",\n    \"neighborhood\": \"West Village\",\n    \"cuisines\": [\n      \"Pizza\"\n    ],\n    \"address\": \"104 Christopher St\",\n    \"guide_appearances\": 13,\n    \"closed\": false,\n    \"crawled_at\": \"2026-09-19T19:08:34.335Z\",\n    \"booking\": null,\n    \"review_headline\": \"The second outpost of NYC\u2019s best slice shop serves the same great pizza in the West Village.\"\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"5ca47bdb-c6c0-40ac-8646-8545c8ab6e54\",\n    \"name\": \"Semma\",\n    \"rating\": 8.9,\n    \"price_tier\": 3,\n    \"price_label\": \"EXPENSIVE\",\n    \"neighborhood\": \"West Village\",\n    \"cuisines\": [\n      \"Indian\"\n    ],\n    \"address\": \"60 Greenwich Ave\",\n    \"guide_appearances\": 12,\n    \"closed\": false,\n    \"crawled_at\": \"2026-09-19T19:08:46.592Z\",\n    \"booking\": {\n      \"policy\": \"reservations-recommended\",\n      \"notes\": \"Reservations are released online two weeks in advance. There aren't any tables saved for walk-ins, but there are 12 seats at the bar, so you can always try your luck there.\"\n    },\n    \"review_headline\": \"Semma makes some of the best Indian food in America\"\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"459883fb-6e87-4947-b5c0-2061a223f19a\",\n    \"name\": \"Mama's Too\",\n    \"rating\": 8.8,\n    \"price_tier\": 1,\n    \"price_label\": \"INEXPENSIVE\",\n    \"neighborhood\": \"West Village\",\n    \"cuisines\": [\n      \"Pizza\"\n    ],\n    \"address\": \"325 Bleecker St\",\n    \"guide_appearances\": 13,\n    \"closed\": false,\n    \"crawled_at\": \"2026-09-19T19:09:03.501Z\",\n    \"booking\": null,\n    \"review_headline\": \"Grab a cacio e pepe or pepperoni square at the West Village outpost of Mama\u2019s Too.\"\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"efcc2281-321f-4bf8-b75b-5a27cf8ae6fe\",\n    \"name\": \"Di Fara Pizza\",\n    \"rating\": 8.7,\n    \"price_tier\": 2,\n    \"price_label\": \"MODERATELY_EXPENSIVE\",\n    \"neighborhood\": \"Midwood\",\n    \"cuisines\": [\n      \"Pizza\"\n    ],\n    \"address\": \"1424 Avenue J\",\n    \"guide_appearances\": 4,\n    \"closed\": false,\n    \"crawled_at\": \"2026-09-19T19:09:21.011Z\",\n    \"booking\": null,\n    \"review_headline\": \"Brooklyn\u2019s Di Fara is one of the best slices of pizza in New York.\"\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"b00b2b32-bb72-43c9-9b19-d0ffb041791e\",\n    \"name\": \"Lucia Pizza Of The Upper East Side\",\n    \"rating\": 8.5,\n    \"price_tier\": 1,\n    \"price_label\": \"INEXPENSIVE\",\n    \"neighborhood\": \"Upper East Side\",\n    \"cuisines\": [\n      \"Pizza\"\n    ],\n    \"address\": \"1571 Third Ave\",\n    \"guide_appearances\": 1,\n    \"closed\": false,\n    \"crawled_at\": \"2026-09-19T19:09:56.580Z\",\n    \"booking\": null,\n    \"review_headline\": \"Lucia makes the best new slice on the Upper East Side\"\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"bcdf6e6e-3393-42f3-b0d7-adcd1f31ea01\",\n    \"name\": \"Titi's Empanadas\",\n    \"rating\": 8.3,\n    \"price_tier\": 1,\n    \"price_label\": \"INEXPENSIVE\",\n    \"neighborhood\": \"Williamsburg\",\n    \"cuisines\": [\n      \"Latin American\"\n    ],\n    \"address\": \"160 Havemeyer St\",\n    \"guide_appearances\": 7,\n    \"closed\": false,\n    \"crawled_at\": \"2026-09-19T19:11:54.899Z\",\n    \"booking\": null,\n    \"review_headline\": \"Grab an excellent, piping hot empanada at Titi\u2019s in Williamsburg.\"\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"a1825a09-f3e0-4aa8-921f-4cf65f62bfcb\",\n    \"name\": \"Fini Pizza\",\n    \"rating\": 7.9,\n    \"price_tier\": 1,\n    \"price_label\": \"INEXPENSIVE\",\n    \"neighborhood\": \"Williamsburg\",\n    \"cuisines\": [\n      \"Pizza\"\n    ],\n    \"address\": \"305 Bedford Ave\",\n    \"guide_appearances\": 3,\n    \"closed\": false,\n    \"crawled_at\": \"2026-09-19T19:17:49.791Z\",\n    \"booking\": null,\n    \"review_headline\": \"A slice of lemon makes all the difference at Fini Pizza\"\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"22e2a023-2048-43ef-aa1f-05b1a5ebf59e\",\n    \"name\": \"Slicehaus\",\n    \"rating\": 7.8,\n    \"price_tier\": 1,\n    \"price_label\": \"INEXPENSIVE\",\n    \"neighborhood\": \"West Village\",\n    \"cuisines\": [\n      \"Pizza\"\n    ],\n    \"address\": \"30 Carmine St\",\n    \"guide_appearances\": 0,\n    \"closed\": false,\n    \"crawled_at\": \"2026-09-19T19:20:01.025Z\",\n    \"booking\": null,\n    \"review_headline\": \"Slicehaus is a great sandwich shop wearing a pizzeria-shaped mask\"\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"0976380b-7d2b-4687-b6da-8be1f417693e\",\n    \"name\": \"John's of Bleecker Street\",\n    \"rating\": 7.5,\n    \"price_tier\": 2,\n    \"price_label\": \"MODERATELY_EXPENSIVE\",\n    \"neighborhood\": \"West Village\",\n    \"cuisines\": [\n      \"Pizza\"\n    ],\n    \"address\": \"278 Bleecker St\",\n    \"guide_appearances\": 4,\n    \"closed\": false,\n    \"crawled_at\": \"2026-09-19T19:32:04.898Z\",\n    \"booking\": null,\n    \"review_headline\": \"A West Village classic with pretty good pies and a whole lot of tourists.\"\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"id\": \"afd434b6-10c3-4a9d-b3f5-99b81ea5bb45\",\n    \"name\": \"L'Industrie\",\n    \"rating\": null,\n    \"price_tier\": null,\n    \"price_label\": null,\n    \"neighborhood\": \"New York\",\n    \"cuisines\": [],\n    \"address\": \"197 Grand Street\",\n    \"guide_appearances\": 3,\n    \"closed\": false,\n    \"crawled_at\": \"2026-09-20T15:57:25.032Z\",\n    \"booking\": null\n  }\n]"
+          }
+        ]
+      },
+      "jsonrpc": "2.0",
+      "id": "reg1-f-010b"
+    }
+  },
+  {
+    "id": "f-012",
+    "envelope": {
+      "jsonrpc": "2.0",
+      "id": "reg1-f-012",
+      "method": "tools/call",
+      "params": {
+        "name": "search_restaurants",
+        "arguments": {
+          "city": "new-york",
+          "occasion": "BanquetXYZ"
+        }
+      }
+    },
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "[]"
+          }
+        ]
+      },
+      "jsonrpc": "2.0",
+      "id": "reg1-f-012"
+    }
+  },
+  {
+    "id": "f-013",
+    "envelope": {
+      "jsonrpc": "2.0",
+      "id": "reg1-f-013",
+      "method": "tools/call",
+      "params": {
+        "name": "compare_restaurants",
+        "arguments": {
+          "city": "new-york",
+          "restaurants": [
+            "L'Industrie",
+            "Lilia"
+          ]
+        }
+      }
+    },
+    "response": {
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "[\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"query\": \"L'Industrie\",\n    \"found\": true,\n    \"id\": \"afd434b6-10c3-4a9d-b3f5-99b81ea5bb45\",\n    \"name\": \"L'Industrie\",\n    \"rating\": null,\n    \"price_tier\": null,\n    \"neighborhood\": \"New York\",\n    \"cuisines\": [],\n    \"good_for\": [],\n    \"reservation\": null,\n    \"booking\": null,\n    \"closed\": false,\n    \"review_headline\": null,\n    \"guide_appearances\": 3\n  },\n  {\n    \"data_as_of\": \"2026-09-20T16:36:56.796Z\",\n    \"query\": \"Lilia\",\n    \"found\": true,\n    \"id\": \"bb1403b1-9268-4322-8827-92cc8e7ecaac\",\n    \"name\": \"Lilia\",\n    \"rating\": 8.9,\n    \"price_tier\": 3,\n    \"neighborhood\": \"Williamsburg\",\n    \"cuisines\": [\n      \"Italian\",\n      \"Pasta\"\n    ],\n    \"good_for\": [\n      \"Date Nights\"\n    ],\n    \"reservation\": {\n      \"url\": \"https://resy.com/cities/new-york-ny/venues/lilia?seats=2\",\n      \"platform\": \"RESY\"\n    },\n    \"booking\": {\n      \"policy\": \"reservations-recommended\",\n      \"notes\": \"There\u2019s one very important thing to keep in mind when it comes to getting a table at Lilia: They take reservations over the phone. In fact, it\u2019s easier to get a table over the phone. Reservations are released 30 days in advance at 10am, and whatever isn\u2019t booked over the phone\u2026\"\n    },\n    \"closed\": false,\n    \"review_headline\": \"At Williamsburg's Lilia, it was never about the hype\",\n    \"guide_appearances\": 21\n  }\n]"
+          }
+        ]
+      },
+      "jsonrpc": "2.0",
+      "id": "reg1-f-013"
+    }
+  }
+]
