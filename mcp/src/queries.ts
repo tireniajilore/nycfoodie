@@ -1,24 +1,35 @@
 // Query layer for the nycfoodie MCP server (read-only).
 //
-// Every tool resolves restaurants to their single "primary" Infatuation
-// listing: the one with review prose wins, then the highest rating.
+// Every tool resolves restaurants to their single "primary" listing: the
+// Infatuation listing when one exists (review prose first, then highest
+// rating), otherwise the best listing from any other source. Eater-only
+// venues must resolve too — previously a venue with no Infatuation listing
+// vanished from search and get_restaurant entirely.
 // Known-closed venues are excluded unless include_closed is set.
 
 import type { Database } from "better-sqlite3";
 
 const SOURCE = "infatuation";
 
-/** One primary listing per restaurant: prose first, then highest rating. */
+/**
+ * One primary listing per restaurant. Infatuation wins wherever a venue has
+ * one, so existing primaries never change; otherwise the best listing from
+ * any other source is picked (review prose, rating, then the venue-named
+ * listing over remediated "Dish at Venue" rows on exact ties).
+ */
 const PRIMARY_LISTINGS_CTE = `primary_listings AS (
   SELECT * FROM (
     SELECT sl.*,
       ROW_NUMBER() OVER (
         PARTITION BY sl.restaurant_id
-        ORDER BY (rv.id IS NOT NULL) DESC, sl.rating DESC
+        ORDER BY (sl.source_slug = '${SOURCE}') DESC,
+                 (rv.id IS NOT NULL) DESC,
+                 sl.rating DESC,
+                 (sl.name = r2.name) DESC
       ) AS rn
     FROM source_listings sl
+    JOIN restaurants r2 ON r2.id = sl.restaurant_id
     LEFT JOIN reviews rv ON rv.source_listing_id = sl.id
-    WHERE sl.source_slug = '${SOURCE}'
   )
   WHERE rn = 1
 )`;
@@ -661,15 +672,24 @@ export function getRestaurant(
     )
     .get(r.id) as Record<string, unknown> | undefined;
   if (!row) return null;
+  // Tags and guides stay source-honest: the primary listing's source, so
+  // Infatuation venues keep exactly their Infatuation tags/guides while
+  // Eater-only venues show their Eater tags/guides (possibly none) instead
+  // of vanishing. Never invent an Infatuation review for an Eater-only venue.
+  const primarySource = (
+    db
+      .prepare("SELECT source_slug FROM source_listings WHERE id = ?")
+      .get(row.primary_listing_id) as { source_slug: string }
+  ).source_slug;
   const tags = db
     .prepare(
       `SELECT t.kind, t.label FROM listing_tags lt
        JOIN tags t ON t.id = lt.tag_id
        JOIN source_listings sl ON sl.id = lt.source_listing_id
-       WHERE sl.restaurant_id = ? AND sl.source_slug = '${SOURCE}'
+       WHERE sl.restaurant_id = ? AND sl.source_slug = ?
        ORDER BY t.kind, t.label`
     )
-    .all(r.id) as { kind: string; label: string }[];
+    .all(r.id, primarySource) as { kind: string; label: string }[];
   const grouped: Record<string, string[]> = {};
   for (const t of tags) {
     if (!t.label.trim()) continue; // safety net: skip empty-label tags
@@ -692,10 +712,10 @@ export function getRestaurant(
       `SELECT g.title, g.url, ge.position, ge.entry_name, ge.blurb FROM guide_entries ge
        JOIN guides g ON g.id = ge.guide_id
        JOIN source_listings sl ON sl.id = ge.source_listing_id
-       WHERE sl.restaurant_id = ? AND sl.source_slug = '${SOURCE}'
+       WHERE sl.restaurant_id = ? AND sl.source_slug = ?
        ORDER BY g.title, ge.position`
     )
-    .all(r.id) as Record<string, unknown>[];
+    .all(r.id, primarySource) as Record<string, unknown>[];
   const review: Record<string, unknown> = {
     title: row.review_title,
     // Honest headline: the source's real headline, or null when it has none

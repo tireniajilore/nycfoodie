@@ -6,10 +6,21 @@
 // Database path: NYCFOODIE_DB env var, else nycfoodie.db at the repo root.
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { dirname, join } from "node:path";
-import { copyFileSync, existsSync, renameSync, openSync, fsyncSync, closeSync } from "node:fs";
+import { dirname, join, basename } from "node:path";
+import {
+  copyFileSync,
+  existsSync,
+  renameSync,
+  openSync,
+  fsyncSync,
+  closeSync,
+  unlinkSync,
+  readdirSync,
+  readFileSync,
+  writeSync,
+} from "node:fs";
 import Database from "better-sqlite3";
-import { getDb, openDb, openReadDb } from "nycfoodie-db";
+import { closeDb, getDb, openDb, openReadDb } from "nycfoodie-db";
 import { migrate } from "nycfoodie-db/dist/migrate.js";
 import { z } from "zod";
 import {
@@ -43,10 +54,18 @@ const seedPath = new URL("../../nycfoodie.db", import.meta.url).pathname;
 //  3. Image carries a newer dataset (dataset_meta.built_at) than the volume ->
 //     swap it in, preserving user rows.
 //
-// The swap is atomic: the image is copied to a temp file in the same
-// directory, fsynced, then renamed over the live file. rename(2) is atomic, so
-// a process killed at any point can never leave a half-written database
-// behind. (The earlier non-atomic in-place copy is what corrupted the volume.)
+// The swap is staged, never in place:
+//   a. The seed is integrity-checked BEFORE the live file is touched; a
+//      corrupt image aborts the swap and the live file is left alone.
+//   b. The replacement is fully built in a temp file on the same filesystem:
+//      copy the seed, run migrations, restore user rows, integrity-check,
+//      fsync. Only then is it renamed over the live file.
+//   c. Stale -wal/-shm sidecars from the old database generation are removed
+//      before the rename, so they can never be replayed against the new file.
+//   d. The directory is fsynced after the rename so the new entry is durable.
+// rename(2) is atomic, so a process killed at any point can never leave a
+// half-written database behind. (The earlier non-atomic in-place copy is what
+// corrupted the volume.)
 // Assumes a single server instance; concurrent boots could interleave swaps.
 const USER_TABLES = ["feedback", "usage_log"] as const;
 
@@ -160,13 +179,221 @@ function readBuiltAt(path: string): string {
 }
 
 /**
- * Atomically replace the volume database with the image copy, preserving
- * user-generated rows. On `reason: "corrupt"` the old file is quarantined
- * first for forensics.
+ * PRAGMA integrity_check on a database file. Never throws.
  */
-function atomicReplaceFromSeed(reason: "corrupt" | "refresh"): void {
+function integrityOk(path: string): boolean {
+  try {
+    const db = new Database(path, { readonly: true });
+    try {
+      const row = db.prepare("PRAGMA integrity_check").get() as
+        | { integrity_check: string }
+        | undefined;
+      return row?.integrity_check === "ok";
+    } finally {
+      db.close();
+    }
+  } catch {
+    return false;
+  }
+}
+
+/** Force any WAL content into the main database file. Never throws. */
+function checkpointDb(path: string): void {
+  try {
+    const db = new Database(path);
+    try {
+      db.pragma("wal_checkpoint(TRUNCATE)");
+    } finally {
+      db.close();
+    }
+  } catch {
+    // Best effort: boot continues; the next opener replays the WAL.
+  }
+}
+
+/** fsync a directory so a rename inside it is durable. Never throws. */
+function fsyncDir(dir: string): void {
+  try {
+    const fd = openSync(dir, "r");
+    try {
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+  } catch {
+    // Best effort: the rename itself is already atomic.
+  }
+}
+
+/** Remove -wal/-shm sidecars for a database path. Never throws. */
+function unlinkSidecars(path: string): void {
+  for (const suffix of ["-wal", "-shm"]) {
+    try {
+      unlinkSync(`${path}${suffix}`);
+    } catch {
+      // Absent: nothing to do.
+    }
+  }
+}
+
+/**
+ * Remove temp replacement files left behind by a killed boot, so a stale
+ * half-built file can never be mistaken for anything. Never throws.
+ */
+function cleanStaleTempDbs(): void {
+  try {
+    const dir = dirname(dbPath);
+    const prefix = `${basename(dbPath)}.new-`;
+    for (const name of readdirSync(dir)) {
+      if (name.startsWith(prefix)) {
+        try {
+          unlinkSync(join(dir, name));
+        } catch {
+          // Gone already: fine.
+        }
+      }
+    }
+  } catch {
+    // Unlistable directory: boot continues; tmp names are unique per boot.
+  }
+}
+
+/**
+ * Build a fully validated replacement database in a temp file on the same
+ * filesystem: copy the seed, run migrations, restore user rows,
+ * integrity-check, fsync. Returns the temp path, or null when the
+ * replacement cannot be built — the live file is then left untouched.
+ */
+function buildReplacementDb(preserved: PreservedTable[]): string | null {
+  if (!integrityOk(seedPath)) {
+    console.log(JSON.stringify({ event: "db_replace_aborted", reason: "seed_corrupt" }));
+    return null;
+  }
+  const tmp = `${dbPath}.new-${process.pid}-${Date.now()}`;
+  try {
+    copyFileSync(seedPath, tmp);
+    try {
+      migrate(tmp); // idempotent; keeps a stale image forward-compatible
+    } finally {
+      // migrate() leaves its singleton handle open on tmp: release it, or a
+      // later openDb(dbPath) would return this stale handle and the restore
+      // below would never checkpoint into the main file.
+      closeDb();
+    }
+    restoreUserRows(tmp, preserved); // user rows land BEFORE validation
+    // Force restored rows out of the WAL into the main file: the temp
+    // sidecars are deleted below, and must not take committed rows with them.
+    checkpointDb(tmp);
+    if (!integrityOk(tmp)) {
+      console.log(
+        JSON.stringify({ event: "db_replace_aborted", reason: "replacement_corrupt" })
+      );
+      try {
+        unlinkSync(tmp);
+      } catch {
+        // Best effort.
+      }
+      return null;
+    }
+    const fd = openSync(tmp, "r+");
+    try {
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+    // Sidecars of the temp file must not be left behind: only the renamed
+    // main file becomes the live database.
+    unlinkSidecars(tmp);
+    return tmp;
+  } catch (err) {
+    console.log(
+      JSON.stringify({
+        event: "db_replace_aborted",
+        reason: "build_failed",
+        error: String(err),
+      })
+    );
+    try {
+      unlinkSync(tmp);
+    } catch {
+      // Best effort.
+    }
+    return null;
+  }
+}
+
+/**
+ * Best-effort inter-process boot lock so two server instances sharing a
+ * volume can never interleave replacements (e.g. during a deploy overlap).
+ * Uses O_CREAT|O_EXCL as an atomic mutex with stale-holder detection via
+ * the recorded pid. Returns a release function, or null when another live
+ * boot holds the lock — the caller must then skip the replacement and
+ * serve the live database as-is (fail safe). Never throws.
+ */
+function acquireBootLock(): (() => void) | null {
+  const lockPath = `${dbPath}.replace.lock`;
+  const release = (): void => {
+    try {
+      unlinkSync(lockPath);
+    } catch {
+      // Already gone: fine.
+    }
+  };
+  const claim = (): boolean => {
+    try {
+      const fd = openSync(lockPath, "wx", 0o644);
+      try {
+        writeSync(fd, String(process.pid));
+      } finally {
+        closeSync(fd);
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (claim()) return release;
+  // A lock file exists: yield to a live holder, steal from a dead one.
+  try {
+    const holderPid = parseInt(readFileSync(lockPath, "utf8").trim(), 10);
+    if (Number.isFinite(holderPid)) {
+      try {
+        process.kill(holderPid, 0); // throws ESRCH when the holder is dead
+        console.log(
+          JSON.stringify({ event: "db_replace_skipped", reason: "lock_held" })
+        );
+        return null;
+      } catch {
+        // Holder is dead: steal the stale lock below.
+      }
+    }
+  } catch {
+    // Unreadable lock file: try to steal it below.
+  }
+  try {
+    unlinkSync(lockPath);
+  } catch {
+    // Gone already: fine.
+  }
+  if (claim()) return release;
+  // Lost the race to another boot: yield, fail safe.
+  console.log(JSON.stringify({ event: "db_replace_skipped", reason: "lock_held" }));
+  return null;
+}
+
+/**
+ * Atomically replace the volume database with the image copy, preserving
+ * user-generated rows. The live file is never touched before the
+ * replacement is fully built and validated. On `reason: "corrupt"` the old
+ * file is quarantined first for forensics.
+ */
+function atomicReplaceFromSeed(reason: "seed" | "corrupt" | "refresh"): void {
   const preserved = salvageUserRows(dbPath);
-  const preservedCounts = Object.fromEntries(preserved.map((t) => [t.table, t.rows.length]));
+  const preservedCounts = Object.fromEntries(
+    preserved.map((t) => [t.table, t.rows.length])
+  );
+  const tmp = buildReplacementDb(preserved);
+  if (!tmp) return; // live file untouched; boot proceeds on the old database
   if (reason === "corrupt") {
     try {
       renameSync(dbPath, `${dbPath}.corrupt-${Date.now()}.bak`);
@@ -174,16 +401,22 @@ function atomicReplaceFromSeed(reason: "corrupt" | "refresh"): void {
       // Already gone (e.g. a concurrent boot); continue with the reseed.
     }
   }
-  const tmp = `${dbPath}.new-${process.pid}`;
-  copyFileSync(seedPath, tmp);
-  const fd = openSync(tmp, "r+");
+  // A -wal/-shm from the old database generation must never be replayed
+  // against the replacement file.
+  unlinkSidecars(dbPath);
   try {
-    fsyncSync(fd);
-  } finally {
-    closeSync(fd);
+    renameSync(tmp, dbPath);
+  } catch (err) {
+    console.log(
+      JSON.stringify({
+        event: "db_replace_failed",
+        reason,
+        error: String(err),
+      })
+    );
+    return;
   }
-  renameSync(tmp, dbPath);
-  restoreUserRows(dbPath, preserved);
+  fsyncDir(dirname(dbPath));
   console.log(
     JSON.stringify({
       event: "db_replace",
@@ -193,22 +426,37 @@ function atomicReplaceFromSeed(reason: "corrupt" | "refresh"): void {
   );
 }
 
-if (seedPath !== dbPath && existsSync(seedPath)) {
-  if (!existsSync(dbPath)) {
-    copyFileSync(seedPath, dbPath);
-    console.log(JSON.stringify({ event: "db_seed", from: seedPath, to: dbPath }));
-  } else if (!probeDb(dbPath)) {
-    atomicReplaceFromSeed("corrupt");
-  } else {
-    // Data release: the image carries a newer dataset than the volume.
-    // The image DB is stamped with dataset_meta.built_at at release time.
-    const seedBuiltAt = readBuiltAt(seedPath);
-    const liveBuiltAt = readBuiltAt(dbPath);
-    if (seedBuiltAt && seedBuiltAt > liveBuiltAt) {
-      atomicReplaceFromSeed("refresh");
+// Volume replacement is single-writer: the lock also guards
+// cleanStaleTempDbs(), which must never delete another boot's temp file.
+const releaseBootLock = acquireBootLock();
+if (releaseBootLock) {
+  try {
+    cleanStaleTempDbs();
+    if (seedPath !== dbPath && existsSync(seedPath)) {
+      if (!existsSync(dbPath)) {
+        atomicReplaceFromSeed("seed");
+      } else if (!probeDb(dbPath)) {
+        atomicReplaceFromSeed("corrupt");
+      } else {
+        // Data release: the image carries a newer dataset than the volume.
+        // The image DB is stamped with dataset_meta.built_at at release time.
+        const seedBuiltAt = readBuiltAt(seedPath);
+        const liveBuiltAt = readBuiltAt(dbPath);
+        if (seedBuiltAt && seedBuiltAt > liveBuiltAt) {
+          atomicReplaceFromSeed("refresh");
+        } else if (!seedBuiltAt && !integrityOk(seedPath)) {
+          // Corrupt image, healthy volume: serve the volume, but say so loudly
+          // so the bad image gets noticed instead of silently pinning stale data.
+          console.log(JSON.stringify({ event: "db_seed_unreadable" }));
+        }
+      }
     }
+  } finally {
+    releaseBootLock();
   }
 }
+// else: another live boot holds the replacement lock; serve the live
+// database as-is. The refresh is re-evaluated on the next boot.
 const logPath =
   process.env.NYCFOODIE_LOG ?? join(dirname(dbPath), "nycfoodie-mcp-calls.jsonl");
 
