@@ -7,7 +7,8 @@
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { dirname, join } from "node:path";
-import { copyFileSync, existsSync } from "node:fs";
+import { copyFileSync, existsSync, renameSync, openSync, fsyncSync, closeSync } from "node:fs";
+import Database from "better-sqlite3";
 import { getDb, openDb, openReadDb } from "nycfoodie-db";
 import { migrate } from "nycfoodie-db/dist/migrate.js";
 import { z } from "zod";
@@ -28,11 +29,185 @@ const dbPath =
   process.env.NYCFOODIE_DB ?? new URL("../../nycfoodie.db", import.meta.url).pathname;
 const seedPath = new URL("../../nycfoodie.db", import.meta.url).pathname;
 
-// First boot on a fresh volume: seed the database from the copy baked into
-// the image, so feedback and call logs written afterwards persist on the volume.
-if (!existsSync(dbPath) && seedPath !== dbPath && existsSync(seedPath)) {
-  copyFileSync(seedPath, dbPath);
-  console.log(JSON.stringify({ event: "db_seed", from: seedPath, to: dbPath }));
+// Volume database lifecycle.
+//
+// NYCFOODIE_DB lives on a Railway persistent volume: it survives deploys so
+// feedback and usage logs persist. The restaurant dataset itself ships inside
+// the image (seedPath). Three cases:
+//
+//  1. Missing volume DB -> seed from the image (fresh volume).
+//  2. Corrupt volume DB -> salvage user rows best-effort, quarantine the
+//     file, reseed from the image. A previous deploy was once killed
+//     mid-copy and left a truncated database behind; without this the server
+//     crash-loops in migrate() with SQLITE_CORRUPT.
+//  3. Image carries a newer dataset (dataset_meta.built_at) than the volume ->
+//     swap it in, preserving user rows.
+//
+// The swap is atomic: the image is copied to a temp file in the same
+// directory, fsynced, then renamed over the live file. rename(2) is atomic, so
+// a process killed at any point can never leave a half-written database
+// behind. (The earlier non-atomic in-place copy is what corrupted the volume.)
+// Assumes a single server instance; concurrent boots could interleave swaps.
+const USER_TABLES = ["feedback", "usage_log"] as const;
+
+interface PreservedTable {
+  table: string;
+  columns: string[];
+  rows: Record<string, unknown>[];
+}
+
+/** Best-effort read of user-generated rows. Never throws. */
+function salvageUserRows(path: string): PreservedTable[] {
+  const out: PreservedTable[] = [];
+  try {
+    const db = new Database(path, { readonly: true });
+    try {
+      for (const table of USER_TABLES) {
+        try {
+          const exists = db
+            .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+            .get(table) as { name: string } | undefined;
+          if (!exists) continue;
+          const columns = (
+            db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
+          ).map((c) => c.name);
+          const rows = db.prepare(`SELECT * FROM ${table}`).all() as Record<string, unknown>[];
+          out.push({ table, columns, rows });
+        } catch {
+          // Unreadable table: skip it, keep the service bootable.
+        }
+      }
+    } finally {
+      db.close();
+    }
+  } catch {
+    // Unopenable database: nothing to salvage.
+  }
+  return out;
+}
+
+/** Restore salvaged user rows into a fresh database. Never throws. */
+function restoreUserRows(path: string, preserved: PreservedTable[]): void {
+  if (preserved.length === 0) return;
+  try {
+    const db = new Database(path);
+    try {
+      for (const { table, columns, rows } of preserved) {
+        try {
+          const exists = db
+            .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+            .get(table) as { name: string } | undefined;
+          if (!exists || rows.length === 0) continue;
+          // Drop the autoincrement key so restored usage_log rows never
+          // collide with the seed copy's ids; natural keys (feedback.id)
+          // are kept as-is with INSERT OR IGNORE.
+          const insertCols = columns.filter((c) => !(table === "usage_log" && c === "id"));
+          const stmt = db.prepare(
+            `INSERT OR IGNORE INTO ${table} (${insertCols.join(", ")}) VALUES (${insertCols
+              .map(() => "?")
+              .join(", ")})`
+          );
+          const insertMany = db.transaction((rs: Record<string, unknown>[]) => {
+            for (const r of rs) stmt.run(...insertCols.map((c) => r[c]));
+          });
+          insertMany(rows);
+        } catch {
+          // One bad table must not block the boot.
+        }
+      }
+    } finally {
+      db.close();
+    }
+  } catch {
+    // Unwritable fresh database: boot continues; migrate() will surface it.
+  }
+}
+
+/**
+ * Probe that the database is usable, replicating exactly what openDb() does
+ * at startup (open + journal_mode=WAL pragma). Returns false for a corrupt
+ * or otherwise unusable file instead of crashing the boot.
+ */
+function probeDb(path: string): boolean {
+  try {
+    const db = new Database(path);
+    try {
+      db.pragma("journal_mode = WAL");
+      db.prepare("SELECT 1 FROM sqlite_master LIMIT 1").get();
+      return true;
+    } finally {
+      db.close();
+    }
+  } catch {
+    return false;
+  }
+}
+
+function readBuiltAt(path: string): string {
+  try {
+    const db = new Database(path, { readonly: true });
+    try {
+      const row = db
+        .prepare("SELECT value FROM dataset_meta WHERE key = 'built_at'")
+        .get() as { value: string } | undefined;
+      return row?.value ?? "";
+    } finally {
+      db.close();
+    }
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * Atomically replace the volume database with the image copy, preserving
+ * user-generated rows. On `reason: "corrupt"` the old file is quarantined
+ * first for forensics.
+ */
+function atomicReplaceFromSeed(reason: "corrupt" | "refresh"): void {
+  const preserved = salvageUserRows(dbPath);
+  const preservedCounts = Object.fromEntries(preserved.map((t) => [t.table, t.rows.length]));
+  if (reason === "corrupt") {
+    try {
+      renameSync(dbPath, `${dbPath}.corrupt-${Date.now()}.bak`);
+    } catch {
+      // Already gone (e.g. a concurrent boot); continue with the reseed.
+    }
+  }
+  const tmp = `${dbPath}.new-${process.pid}`;
+  copyFileSync(seedPath, tmp);
+  const fd = openSync(tmp, "r+");
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+  renameSync(tmp, dbPath);
+  restoreUserRows(dbPath, preserved);
+  console.log(
+    JSON.stringify({
+      event: "db_replace",
+      reason,
+      preserved: preservedCounts,
+    })
+  );
+}
+
+if (seedPath !== dbPath && existsSync(seedPath)) {
+  if (!existsSync(dbPath)) {
+    copyFileSync(seedPath, dbPath);
+    console.log(JSON.stringify({ event: "db_seed", from: seedPath, to: dbPath }));
+  } else if (!probeDb(dbPath)) {
+    atomicReplaceFromSeed("corrupt");
+  } else {
+    // Data release: the image carries a newer dataset than the volume.
+    // The image DB is stamped with dataset_meta.built_at at release time.
+    const seedBuiltAt = readBuiltAt(seedPath);
+    const liveBuiltAt = readBuiltAt(dbPath);
+    if (seedBuiltAt && seedBuiltAt > liveBuiltAt) {
+      atomicReplaceFromSeed("refresh");
+    }
+  }
 }
 const logPath =
   process.env.NYCFOODIE_LOG ?? join(dirname(dbPath), "nycfoodie-mcp-calls.jsonl");
