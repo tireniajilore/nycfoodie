@@ -144,22 +144,30 @@ function normalizeOccasion(s: string): string {
 /**
  * Reject unknown occasion values with the allowed set, like unsupported
  * cities — a typo'd occasion ('date-nite') must not fail silently with [].
- * The match rule mirrors the filter itself (hyphen/space-separated tokens
- * matched in order, unanchored: 'date-night' matches 'Date Nights'), so
- * every previously-working input keeps working and only inputs that would
- * have silently returned [] are rejected. The empty string keeps its
- * existing no-filter meaning.
+ * Match rule: every input token (hyphens/spaces/underscores split) must be
+ * a prefix of the corresponding allowed-value token, in order
+ * ('date-night' matches 'Date Nights'; 'date-nite' does not). This keeps
+ * the documented flexibility while rejecting garbage like 'a' or '---'
+ * that a substring test would wrongly accept. The empty string keeps its
+ * existing no-filter meaning; a value that normalises to nothing is
+ * rejected outright.
  */
 function requireOccasion(occasion: string | undefined): void {
   if (!occasion) return;
-  const pattern = normalizeOccasion(occasion).split(" ").map(escapeRegExp).join(".*");
-  const re = new RegExp(pattern);
-  const ok = OCCASION_VALUES.some((v) => re.test(normalizeOccasion(v)));
-  if (!ok) {
-    throw new Error(
+  const invalid = () =>
+    new Error(
       `Unsupported occasion '${occasion}'. Allowed: ${OCCASION_VALUES.join(", ")}.`
     );
-  }
+  const inputTokens = normalizeOccasion(occasion).split(" ").filter(Boolean);
+  if (inputTokens.length === 0) throw invalid();
+  const ok = OCCASION_VALUES.some((v) => {
+    const allowed = normalizeOccasion(v).split(" ");
+    return (
+      inputTokens.length <= allowed.length &&
+      inputTokens.every((tok, i) => allowed[i].startsWith(tok))
+    );
+  });
+  if (!ok) throw invalid();
 }
 
 /** Bronx neighborhoods, shared by the "bronx" and "the bronx" keys. */
