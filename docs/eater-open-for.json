@@ -193,5 +193,80 @@
     "open_for": "Breakfast and lunch"
    }
   ]
+ },
+ "best-burgers-nyc": {
+  "title": "The Best Burgers in New York City, According to Eater Editors",
+  "entries": [
+   {
+    "position": 1,
+    "name": "JG Melon",
+    "open_for": "Lunch and dinner"
+   },
+   {
+    "position": 2,
+    "name": "Gallaghers Steakhouse",
+    "open_for": "Lunch and dinner"
+   },
+   {
+    "position": 3,
+    "name": "Smacking Burger",
+    "open_for": "Lunch and dinner"
+   },
+   {
+    "position": 4,
+    "name": "Le B.",
+    "open_for": "Dinner"
+   },
+   {
+    "position": 5,
+    "name": "Old Town Bar",
+    "open_for": "Lunch and dinner"
+   },
+   {
+    "position": 6,
+    "name": "Joe Jr.",
+    "open_for": "lunch and dinner"
+   },
+   {
+    "position": 7,
+    "name": "Minetta Tavern",
+    "open_for": "Lunch and dinner"
+   },
+   {
+    "position": 8,
+    "name": "Hamburger America",
+    "open_for": "lunch and dinner"
+   },
+   {
+    "position": 9,
+    "name": "Raoul's",
+    "open_for": "Dinner, lunch on weekends"
+   },
+   {
+    "position": 10,
+    "name": "Eel Bar",
+    "open_for": "Dinner"
+   },
+   {
+    "position": 11,
+    "name": "Cozy Royale",
+    "open_for": "Dinner, weekend lunch"
+   },
+   {
+    "position": 12,
+    "name": "Rolo's",
+    "open_for": "dinner"
+   },
+   {
+    "position": 13,
+    "name": "The Long Island Bar",
+    "open_for": "Dinner, 2 p.m. weekends"
+   },
+   {
+    "position": 14,
+    "name": "Red Hook Tavern",
+    "open_for": "Dinner, lunch on weekends"
+   }
+  ]
  }
 }

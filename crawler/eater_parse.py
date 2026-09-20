@@ -169,6 +169,8 @@ def parse_map(md, meta_title, map_url):
     for sec in sections[1:]:
         nl = sec.find("\n")
         name = sec[:nl].strip() if nl != -1 else sec.strip()
+        # unescape markdown-escaped chars in headings (e.g. "Ankara \#3")
+        name = re.sub(r"\\([#\-\.\!\(\)\[\]\*\_])", r"\1", name)
         body = sec[nl + 1:] if nl != -1 else ""
         if not name or len(name) > 120:
             continue
