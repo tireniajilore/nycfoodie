@@ -11,6 +11,11 @@ const apiKey = process.env.OPENAI_API_KEY;
 const model = process.env.OPENAI_REVIEW_MODEL || "gpt-4o";
 const [owner, repo] = (process.env.GITHUB_REPOSITORY || "/").split("/");
 
+// Reasoning models (gpt-5*, o1/o3/o4*) reject sampling params and max_tokens
+// on the chat completions endpoint — they need max_completion_tokens instead
+// (generous: hidden reasoning tokens count against the same budget).
+const isReasoningModel = /^(gpt-5|o1|o3|o4)([.-]|$)/i.test(model);
+
 if (!apiKey) {
   console.log("OPENAI_API_KEY not set — skipping AI review.");
   process.exit(0);
@@ -84,8 +89,9 @@ const aiRes = await fetch("https://api.openai.com/v1/chat/completions", {
   headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
   body: JSON.stringify({
     model,
-    temperature: 0.2,
-    max_tokens: 1500,
+    // Reasoning models only accept the default temperature and need
+    // max_completion_tokens; classic models keep the tuned sampling params.
+    ...(isReasoningModel ? { max_completion_tokens: 6000 } : { temperature: 0.2, max_tokens: 1500 }),
     messages: [
       { role: "system", content: system },
       {
