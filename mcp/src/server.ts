@@ -243,7 +243,7 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
     "get_restaurant",
     {
       description:
-        "Get the full picture for one restaurant in one call: Infatuation rating (0–10), price tier, address, reservation link, booking intel, review summary, tags and every guide it appears in. Use when the user names a specific restaurant. Full review prose is opt-in via include_prose (default: headline and summary only). review.headline is the source's actual headline when one exists, otherwise null — use review.summary for the descriptive text.",
+        "Get the full picture for one restaurant in one call: Infatuation rating (0–10), price tier, address, reservation link, booking intel, review summary, tags and every guide it appears in. Use when the user names a specific restaurant. Full review prose is opt-in via include_prose (default: headline and summary only). review.headline is the source's actual headline when one exists, otherwise null — use review.summary for the descriptive text. match_type is 'exact' when the id or name matched verbatim, 'fuzzy' when it was resolved from a partial/typo'd name — never present a fuzzy match as the venue the user named without saying so. booking is null when the source has no booking intel (not the same as walk-in-only); a reservation link alone never implies a booking policy.",
       annotations: READ_ONLY,
       inputSchema: {
         id: z.string().describe("Canonical restaurant id, or a name to resolve"),
@@ -308,7 +308,7 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
     "find_similar",
     {
       description:
-        "Find restaurants similar to a named one, scored by shared cuisine, occasion and neighbourhood tags plus guide co-occurrence. Use for 'like X' or 'alternatives to X' requests.",
+        "Find restaurants similar to a named one, scored by shared cuisine, occasion and neighbourhood tags, price-tier proximity and guide co-occurrence. Use for 'like X' or 'alternatives to X' requests.",
       annotations: READ_ONLY,
       inputSchema: {
         id: z.string().describe("Canonical restaurant id, or a name to resolve"),

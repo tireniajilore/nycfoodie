@@ -55,10 +55,23 @@ function round1(n: number): number {
 }
 
 function trunc(s: string, n = 280): string {
-  return s.length > n ? s.slice(0, n - 1) + "…" : s;
+  const t = s.trim().replace(/\s+/g, " ");
+  if (t.length <= n) return t;
+  const cut = t.slice(0, n);
+  const lastSpace = cut.lastIndexOf(" ");
+  // Never leave a dangling word fragment (Round 5: B4): back up to the last
+  // word boundary so notes never cut off mid-word.
+  return (lastSpace > n * 0.5 ? cut.slice(0, lastSpace) : cut).trimEnd() + "…";
 }
 
-/** Heuristic v0: classify booking policy from reservation tips prose. */
+/**
+ * Heuristic v1: classify booking policy from reservation tips prose.
+ *
+ * Policies: "reservations-required" (walk-ins not seated), "walk-in-only"
+ * (no reservations taken), "reservations-recommended" (reservations exist
+ * and are advised), null (no usable intel). A null policy means "no booking
+ * intel" — never invent a policy without source text (Round 5: B2).
+ */
 export function bookingIntel(tips: string | string[] | undefined): {
   policy: string | null;
   waitNotes: string | null;
@@ -66,7 +79,21 @@ export function bookingIntel(tips: string | string[] | undefined): {
   const text = Array.isArray(tips) ? tips.join(" ") : (tips ?? "");
   if (!text.trim()) return { policy: null, waitNotes: null };
   const t = text;
-  if (/does not (take|accept) reservations|reservations are not accepted|no reservations/i.test(t)) {
+  // Required-language first: "reservations are required" also contains the
+  // word "reservation", so it must be checked before the generic branch
+  // (Round 5: B1 — Ramen By Ra, Bong).
+  if (
+    /reservations? are required|reservation-?only|doesn['’]t take walk-?ins?|does not take walk-?ins?|do not take walk-?ins?|no walk-?ins?|walk-?ins? (are )?not accepted/i.test(
+      t
+    )
+  ) {
+    return { policy: "reservations-required", waitNotes: trunc(t) };
+  }
+  if (
+    /does not (take|accept) reservations|reservations? are not accepted|reservations? not accepted|no reservations( needed| necessary| required)?|reservations? not (needed|necessary)|walk-?ins? only|first-?come/i.test(
+      t
+    )
+  ) {
     return { policy: "walk-in-only", waitNotes: trunc(t) };
   }
   if (/walk-?ins?/i.test(t) && !/reservation/i.test(t)) {

@@ -41,6 +41,76 @@ function likeEscape(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
+/**
+ * Stored wait_notes were truncated mid-word by the crawler (Round 5: B4).
+ * Never surface a dangling word fragment: if the note ends with "…" glued
+ * to a partial word, back up to the last word boundary. New crawls truncate
+ * cleanly at word boundaries; this keeps old rows honest at read time.
+ */
+function cleanNotes(notes: string | null | undefined): string | null {
+  if (!notes) return null;
+  const t = notes.trim();
+  if (!t.endsWith("…")) return t;
+  const body = t.slice(0, -1);
+  if (!body || /[\s.,;:!?]$/.test(body)) return t;
+  const lastSpace = body.lastIndexOf(" ");
+  return (lastSpace > 0 ? body.slice(0, lastSpace) : body).trimEnd() + "…";
+}
+
+/**
+ * Tokenized theme matching for guide titles/summaries (Round 5: O8).
+ * Every token must appear in the title or summary, with & treated as "and"
+ * on both sides ("black and white cookies" matches "Black & White Cookies").
+ * Replaces the old whole-string LIKE and the tag-EXISTS clause, which made
+ * tag-less themes like "cookies" unanswerable.
+ */
+function themeClauses(theme: string, params: unknown[]): string {
+  const tokens = theme
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .split(/[\s-]+/)
+    .filter(Boolean);
+  let cond = "";
+  for (const tok of tokens) {
+    cond += ` AND (REPLACE(LOWER(g.title), '&', 'and') LIKE ? ESCAPE '\\'
+      OR REPLACE(LOWER(g.summary), '&', 'and') LIKE ? ESCAPE '\\')`;
+    const p = `%${likeEscape(tok)}%`;
+    params.push(p, p);
+  }
+  return cond;
+}
+
+/** Distinct guides featuring a restaurant, across all its listings — the one
+ *  definition every tool uses (Round 5: O9). */
+export function guideAppearanceCount(
+  db: Database,
+  restaurantId: string
+): number {
+  const row = db
+    .prepare(
+      `SELECT COUNT(DISTINCT ge.guide_id) AS c FROM guide_entries ge
+       JOIN source_listings sl ON sl.id = ge.source_listing_id
+       WHERE sl.restaurant_id = ?`
+    )
+    .get(restaurantId) as { c: number };
+  return row.c;
+}
+
+/** Did the client ask for this venue exactly (id or name), or did we
+ *  fuzzy-resolve it? (Round 5: I1) */
+export function matchType(
+  db: Database,
+  city: string,
+  idOrName: string
+): "exact" | "fuzzy" {
+  const exact = db
+    .prepare(
+      `SELECT 1 FROM restaurants WHERE city_slug = ? AND (id = ? OR lower(name) = lower(?))`
+    )
+    .get(city, idOrName, idOrName);
+  return exact ? "exact" : "fuzzy";
+}
+
 /** Throw a clear error for unsupported cities instead of silently returning []. */
 function requireCity(db: Database, city: string): void {
   const row = db.prepare("SELECT slug FROM cities WHERE slug = ?").get(city) as
@@ -346,7 +416,8 @@ const CARD_SELECT = `
     (SELECT GROUP_CONCAT(t.label, '|') FROM listing_tags lt JOIN tags t ON t.id = lt.tag_id
       WHERE lt.source_listing_id = pl.id AND t.kind = 'neighborhood') AS neighborhoods,
     (SELECT COUNT(DISTINCT ge.guide_id) FROM guide_entries ge
-      WHERE ge.source_listing_id = pl.id) AS guide_count,
+      JOIN source_listings slx ON slx.id = ge.source_listing_id
+      WHERE slx.restaurant_id = r.id) AS guide_count,
     rv.headline AS review_headline,
     rv.summary AS review_summary
   FROM restaurants r
@@ -378,11 +449,11 @@ function toCard(
   // for multi-location venues (e.g. Fish Cheeks matches 'Noho' via its
   // NOHO-tagged listing while the primary is Williamsburg).
   if (matchedNeighborhood !== undefined) card.matched_neighborhood = matchedNeighborhood;
-  // One booking shape everywhere: an object, or null. A reservation link
-  // means booking is possible even without a stated policy.
-  const bookingPolicy = row.booking_policy ?? (row.reservation_url ? "reservations-available" : null);
-  card.booking = bookingPolicy
-    ? { policy: bookingPolicy, notes: row.wait_notes ?? null }
+  // One booking shape everywhere: an object, or null. Booking reflects
+  // editorial intel only — a reservation link alone never implies a policy
+  // (Round 5: B3). The link still travels in `reservation`.
+  card.booking = row.booking_policy
+    ? { policy: row.booking_policy, notes: cleanNotes(row.wait_notes) }
     : null;
   const headline = realHeadline(row.review_headline, row.review_summary) ?? truncate(row.review_summary, 160);
   if (headline) card.review_headline = headline;
@@ -522,6 +593,15 @@ export function suggestRestaurants(
   name: string,
   limit = 3
 ): { id: string; name: string }[] {
+  // UUID-shaped input is an id, not a misspelled name: a missing id gets no
+  // "did you mean" list (Round 5: O6).
+  if (
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      name.trim()
+    )
+  ) {
+    return [];
+  }
   return rankedNames(db, city, name)
     .slice(0, limit)
     .map(({ id, name }) => ({ id, name }));
@@ -626,6 +706,9 @@ export function getRestaurant(
   return {
     id: r.id,
     name: row.name,
+    // How the query resolved: "exact" (id or name matched verbatim) or
+    // "fuzzy" (prefix/fuzzy resolution, e.g. "Sema" -> Semma). Round 5: I1.
+    match_type: matchType(db, city, idOrName),
     rating: row.rating,
     price_tier: row.price_tier,
     price_label: row.price_label,
@@ -643,13 +726,12 @@ export function getRestaurant(
     reservation: row.reservation_url
       ? { url: row.reservation_url, platform: row.reservation_platform }
       : null,
-    booking:
-      row.booking_policy || row.reservation_url
-        ? {
-            policy: (row.booking_policy as string | null) ?? "reservations-available",
-            notes: row.wait_notes,
-          }
-        : null,
+    booking: row.booking_policy
+      ? {
+          policy: row.booking_policy as string,
+          notes: cleanNotes(row.wait_notes as string | null),
+        }
+      : null,
     closed: row.is_closed === 1,
     source_url: row.source_url,
     review: row.review_title ? review : null,
@@ -664,16 +746,23 @@ export function compareRestaurants(
   idsOrNames: string[]
 ): Record<string, unknown>[] {
   requireCity(db, city);
-  return idsOrNames.map((s) => {
+  // Dedupe: compare(X, X) lists X once (Round 5: O10).
+  const seen = new Set<string>();
+  const out: Record<string, unknown>[] = [];
+  for (const s of idsOrNames) {
     const r = resolveRestaurant(db, city, s);
-    if (!r)
-      return {
+    if (!r) {
+      out.push({
         query: s,
         found: false,
         suggestions: suggestRestaurants(db, city, s).map((x) => x.name),
-      };
+      });
+      continue;
+    }
+    if (seen.has(r.id)) continue;
+    seen.add(r.id);
     const full = getRestaurant(db, city, r.id, false)!;
-    return {
+    out.push({
       query: s,
       found: true,
       id: full.id,
@@ -691,9 +780,12 @@ export function compareRestaurants(
         (full.review as { headline: string | null; summary: string | null } | null)?.headline ??
         truncate((full.review as { summary: string | null } | null)?.summary ?? null, 160) ??
         null,
-      guide_appearances: (full.guide_appearances as unknown[]).length,
-    };
-  });
+      // Same definition as search cards and get_restaurant: distinct guides
+      // across all listings (Round 5: O9).
+      guide_appearances: guideAppearanceCount(db, r.id),
+    });
+  }
+  return out;
 }
 
 export function findGuides(
@@ -707,9 +799,8 @@ export function findGuides(
   const params: unknown[] = [city];
   let where = "g.city_slug = ?";
   if (query) {
-    where += " AND (g.title LIKE ? ESCAPE '\\' OR g.summary LIKE ? ESCAPE '\\')";
-    const p = `%${likeEscape(query)}%`;
-    params.push(p, p);
+    // Same tokenized matching as guide_consensus (Round 5: O8).
+    where += themeClauses(query, params);
   }
   const guides = db
     .prepare(
@@ -762,6 +853,9 @@ export function findSimilar(
        ),
        my_guides AS (
          SELECT DISTINCT guide_id FROM guide_entries WHERE source_listing_id = ?
+       ),
+       my_price AS (
+         SELECT price_tier FROM primary_listings WHERE restaurant_id = ?
        )
        SELECT r.id, r.name, pl.rating, pl.price_tier,
          (SELECT GROUP_CONCAT(t.label, '|') FROM listing_tags lt JOIN tags t ON t.id = lt.tag_id
@@ -773,7 +867,15 @@ export function findSimilar(
            WHEN mt.kind = 'neighborhood' THEN 2 ELSE 1 END), 0) AS tag_score,
          (SELECT COUNT(*) FROM guide_entries ge
            WHERE ge.source_listing_id = pl.id
-             AND ge.guide_id IN (SELECT guide_id FROM my_guides)) AS guide_overlap
+             AND ge.guide_id IN (SELECT guide_id FROM my_guides)) AS guide_overlap,
+         -- Price-tier proximity (Round 5: O7): same tier +2, adjacent +1, so
+         -- a same-price near-match outranks a far cheaper/more expensive one.
+         CASE WHEN (SELECT price_tier FROM my_price) IS NOT NULL
+               AND pl.price_tier = (SELECT price_tier FROM my_price) THEN 2
+              WHEN (SELECT price_tier FROM my_price) IS NOT NULL
+               AND pl.price_tier IS NOT NULL
+               AND ABS(pl.price_tier - (SELECT price_tier FROM my_price)) = 1 THEN 1
+              ELSE 0 END AS price_score
        FROM restaurants r
        JOIN primary_listings pl ON pl.restaurant_id = r.id
        LEFT JOIN listing_tags lt ON lt.source_listing_id = pl.id
@@ -783,10 +885,10 @@ export function findSimilar(
          ${coverage}
        GROUP BY r.id
        HAVING tag_score > 0 OR guide_overlap > 0
-       ORDER BY (tag_score + guide_overlap * 2) DESC, pl.rating DESC
+       ORDER BY (tag_score + guide_overlap * 2 + price_score) DESC, pl.rating DESC
        LIMIT ?`
     )
-    .all(mine.id, mine.id, city, r.id, limit) as Record<string, unknown>[];
+    .all(mine.id, mine.id, r.id, city, r.id, limit) as Record<string, unknown>[];
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
@@ -796,7 +898,10 @@ export function findSimilar(
       ((row.neighborhoods as string | null)?.split("|") ?? []),
       null
     ),
-    similarity: (row.tag_score as number) + (row.guide_overlap as number) * 2,
+    similarity:
+      (row.tag_score as number) +
+      (row.guide_overlap as number) * 2 +
+      (row.price_score as number),
     shared_guides: row.guide_overlap,
   }));
 }
@@ -811,16 +916,11 @@ export function guideConsensus(
   const params: unknown[] = [city];
   let themeCond = "";
   if (theme) {
-    // Theme must match the guide text AND a tag on the restaurant itself.
-    // Otherwise venues that merely appear in a textually-matching guide get
-    // padded into themed results (e.g. non-ramen spots in "ramen" results).
-    themeCond = `AND (g.title LIKE ? ESCAPE '\\' OR g.summary LIKE ? ESCAPE '\\')
-      AND EXISTS (SELECT 1 FROM listing_tags lt2 JOIN tags t2 ON t2.id = lt2.tag_id
-        JOIN source_listings slt ON slt.id = lt2.source_listing_id
-        WHERE slt.restaurant_id = r.id AND slt.source_slug = '${SOURCE}'
-          AND t2.label LIKE ? ESCAPE '\\')`;
-    const p = `%${likeEscape(theme)}%`;
-    params.push(p, p, p);
+    // Tokenized matching: every theme token must appear in the guide title
+    // or summary, with & treated as "and". The old tag-EXISTS clause is gone:
+    // it made tag-less themes ("cookies") unanswerable, and ranked venues
+    // are still only those appearing in theme-matching guides (Round 5: O8).
+    themeCond = themeClauses(theme, params);
   }
   // Two-phase: (1) cheap guide-count ranking over all restaurants — no
   // per-restaurant subqueries; (2) details only for the top rows including

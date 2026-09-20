@@ -239,3 +239,121 @@ problem, needs a different fix.
    blurb-only. The cited examples' venues (William Greenberg, Genesis House)
    have no restaurant row at all, so there is nothing to link to. Needs a
    crawler entity-linking pass (backlog, not a code fix).
+
+## Round 5 + Instinct round 3 — 2026-09-19 (feedback ids a0c9d8f0, 5d2d6c1b)
+
+Verdicts from live reproduction against production. B1–B4 = booking, O5–O10 = other.
+
+### Booking (evaluator: "the weakest part of the API" — agreed)
+
+B1. **Policy contradicts notes — CONFIRMED.** Ramen By Ra: policy
+`reservations-recommended`, notes "Reservations are required…"; Bong:
+`reservations-recommended`, notes "officially they're reservation-only".
+Root: `bookingIntel()` in crawler/src/store.ts maps any "reservation" mention
+to `reservations-recommended`; no `reservations-required` value exists.
+Fix: add the value + detect required-language ("reservations are required",
+"reservation-only", "doesn't take walk-ins", "no walk-ins") before the
+generic reservation branch.
+
+B2. **Null is overloaded — CONFIRMED, with a correction.** Le French Diner,
+Lucali, Chrissy's Pizza → booking null. The evaluator claims "there is no
+walk-ins-only value" — the code HAS `walk-in-only`, but a census of top-50
+cards shows 13 recommended / 14 available / 23 null / 0 walk-in-only: no
+listing's tips ever matched the walk-in patterns, so the value is dead in
+practice. These three venues have no booking intel at all (only ~50 listings
+do). Fix: broaden walk-in patterns; document that null means "no intel" —
+policy must not be invented without source evidence.
+
+B3. **Via Carota `reservations-available` + notes null — CONFIRMED, and the
+inference is the bug.** The policy is not stored; toCard() infers it from
+`reservation_url` (`booking_policy ?? (reservation_url ?
+"reservations-available" : null)`). This was added for round-2 item 8
+("booking null even when reservation.url exists") and now produces the exact
+structured-vs-editorial contradiction class from round 4. Fix: drop the
+URL→policy inference; booking comes only from real intel, the Resy link
+already travels separately in `reservation`.
+
+B4. **Notes truncate mid-word — CONFIRMED.** `trunc(s, n=280)` in
+crawler/src/store.ts slices at 279 chars + "…". Raw tips text is not stored,
+so existing rows need a re-crawl to restore full notes. Fix trunc() to a
+word boundary for future crawls.
+
+### Other
+
+O5. **query='industrie' dilution — REPRODUCED, low severity.** L'industrie
+Pizzeria ranks first; Semma/Mama's Too/Di Fara/Lucia/Titi's follow via FTS
+prose matching. Correct behaviour, noisy tail. Evaluator suggests a
+relevance floor or name-match mode.
+
+O6. **Suggestions fire on UUIDs — CONFIRMED.** Missing UUID →
+['320 Club','Mexico 2000','Pick-A-Bagel']. Root: suggestRestaurants() has no
+score threshold and no id-shape guard. Fix: return [] for UUID-shaped input
+or when the best score is poor.
+
+O7. **find_similar ties — CONFIRMED.** La Bastide: all 12 results at
+similarity 3, shared_guides 0 — one shared cuisine tag each; price
+unweighted, neighbourhood match not decisive. Fix: add price-tier proximity
+to scoring; verify neighbourhood tag matching (evaluator's Cenadou example).
+
+O8. **guide_consensus multi-word themes — CONFIRMED, two compounding
+causes.** 'cookies' → [] because the tag EXISTS clause (added in 13be7aa to
+stop padding) requires a restaurant tag LIKE '%cookies%', which cannot exist.
+'black and white cookies' → [] additionally because the guide is titled
+"The Best Black & White Cookies In NYC" (& vs "and" defeats the LIKE).
+Fix: drop the tag requirement (the ranked query already constrains to
+theme-matching guides; verify ramen stays clean) + normalise &/and and
+tokenise multi-word themes.
+
+O9. **guide_appearances disagree — CONFIRMED (L'industrie = f0c3b727).**
+Search card: 3 = COUNT(DISTINCT guide_id) on the primary listing only.
+Compare: 11 = guide_entries ROWS across all listings (not distinct, not
+primary-only). Post-merge inflation. Fix: one definition everywhere —
+distinct guides across all the restaurant's listings — in search cards,
+compare, and the get_restaurant count.
+
+O10. **compare(X,X) duplicates — CONFIRMED.** compareRestaurants() maps each
+input independently. Fix: dedupe by resolved id.
+
+### Instinct agent round 3
+
+I1. **Contra FAIL — MISATTRIBUTION, with a real UX gap underneath.** There
+is no "Contra" venue in the database; get_restaurant("Contra")
+prefix-resolves to Contrasto (open Greenpoint restaurant, rating null). The
+closed:false and rating:null the evaluator saw are Contrasto's, not Contra's.
+Closure tracking cannot flag a venue that isn't in the data. Real gap:
+fuzzy matches are unlabeled — the evaluator could not tell "Contra" wasn't
+an exact hit. Fix: surface match type (exact vs fuzzy) on get_restaurant.
+
+I2. **"Sema"→Houseman — STALE, already fixed.** Live "Sema" resolves to
+Semma correctly. No action.
+
+### Round 5 correction (no action)
+
+Evaluator withdrew the round-4 Fish Cheeks neighbourhood-text claim:
+Fish Cheeks is genuinely tagged NOHO+Williamsburg; matched_neighborhood
+makes it self-explanatory. Closed.
+
+## Round 5 fixes shipped 2026-09-20 (commit pending)
+
+All ten confirmed issues fixed, fixture-tested (27 assertions green), deployed.
+
+- **B1** — crawler `bookingIntel()` v1: new `reservations-required` policy with
+  required-language detection (are required / reservation-only / doesn't take
+  walk-ins / no walk-ins / walk-ins not accepted), checked before the generic
+  reservation branch. Migration 012 re-derives policies from stored wait_notes.
+- **B2** — walk-in-only patterns broadened (walk-ins only, no reservations
+  needed/necessary, first-come); booking:null documented as "no booking intel".
+- **B3** — dropped the reservation-URL→policy inference everywhere. booking
+  reflects editorial intel only; the link still travels in `reservation`.
+- **B4** — crawler truncates at word boundaries; queries clean old mid-word
+  cuts at read time (raw tips aren't stored, so existing rows can't be
+  restored — only made honest).
+- **O6** — suggestions return [] for UUID-shaped input.
+- **O10** — compare_restaurants dedupes by resolved id.
+- **O8** — guide_consensus: tokenized theme matching with &/and normalization;
+  the tag-EXISTS clause removed. Same matching applied to find_guides.
+- **O9** — guide_appearances = distinct guides across ALL listings, used by
+  search cards, compare and get_restaurant alike.
+- **O7** — find_similar adds price-tier proximity (+2 same tier, +1 adjacent).
+- **I1** — get_restaurant returns match_type ("exact" | "fuzzy") and the tool
+  description tells agents not to present fuzzy matches as named venues.
