@@ -1,0 +1,141 @@
+[
+  {
+    "id": "inv-filt-nb",
+    "tool": "search_restaurants",
+    "args": {
+      "city": "new-york",
+      "neighborhood": "Williamsburg",
+      "limit": 10
+    }
+  },
+  {
+    "id": "inv-filt-cuisine",
+    "tool": "search_restaurants",
+    "args": {
+      "city": "new-york",
+      "cuisine": "Italian",
+      "limit": 10
+    }
+  },
+  {
+    "id": "inv-filt-nb-neg",
+    "tool": "search_restaurants",
+    "args": {
+      "city": "new-york",
+      "neighborhood": "Narnia",
+      "limit": 10
+    }
+  },
+  {
+    "id": "inv-pad",
+    "tool": "search_restaurants",
+    "args": {
+      "city": "new-york",
+      "cuisine": "Mongolian",
+      "limit": 50
+    }
+  },
+  {
+    "id": "inv-err-lat",
+    "tool": "search_restaurants",
+    "args": {
+      "city": "new-york",
+      "lat": 40.7,
+      "limit": 5
+    }
+  },
+  {
+    "id": "inv-err-radius",
+    "tool": "search_restaurants",
+    "args": {
+      "city": "new-york",
+      "radius_km": 5,
+      "limit": 5
+    }
+  },
+  {
+    "id": "inv-err-limit",
+    "tool": "search_restaurants",
+    "args": {
+      "city": "new-york",
+      "limit": "abc"
+    }
+  },
+  {
+    "id": "inv-err-occ",
+    "tool": "top_rated",
+    "args": {
+      "city": "new-york",
+      "occasion": "BanquetXYZ",
+      "limit": 5
+    }
+  },
+  {
+    "id": "inv-idem-a",
+    "tool": "get_restaurant",
+    "args": {
+      "city": "new-york",
+      "id": "Lilia"
+    }
+  },
+  {
+    "id": "inv-idem-b",
+    "tool": "get_restaurant",
+    "args": {
+      "city": "new-york",
+      "id": "Lilia"
+    }
+  },
+  {
+    "id": "inv-ed-koloman",
+    "tool": "get_restaurant",
+    "args": {
+      "city": "new-york",
+      "id": "Koloman"
+    }
+  },
+  {
+    "id": "inv-ed-castillo",
+    "tool": "get_restaurant",
+    "args": {
+      "city": "new-york",
+      "id": "El Castillo de Jagua"
+    }
+  },
+  {
+    "id": "inv-ed-atla",
+    "tool": "search_restaurants",
+    "args": {
+      "city": "new-york",
+      "query": "Atla",
+      "include_closed": true,
+      "limit": 5
+    }
+  },
+  {
+    "id": "inv-pool-top",
+    "tool": "top_rated",
+    "args": {
+      "city": "new-york",
+      "limit": 50
+    }
+  },
+  {
+    "id": "inv-pool-pizza",
+    "tool": "search_restaurants",
+    "args": {
+      "city": "new-york",
+      "query": "pizza",
+      "limit": 30
+    }
+  },
+  {
+    "id": "inv-pool-sushi",
+    "tool": "search_restaurants",
+    "args": {
+      "city": "new-york",
+      "query": "sushi",
+      "limit": 30
+    }
+  }
+]

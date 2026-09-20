@@ -9,3 +9,6 @@ dist/
 .DS_Store
 nycfoodie-mcp-calls.jsonl
 
+
+src/**/*.js
+src/**/*.d.ts

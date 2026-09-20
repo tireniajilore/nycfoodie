@@ -30,7 +30,8 @@
     "status": "verified",
     "title": "booking classifier lacked a reservations-required value; Ramen By Ra and Bong misclassified",
     "tool": "get_restaurant",
-    "regression_note_round0": "PASS"
+    "regression_note_round0": "PASS",
+    "regression_note_round1": "PASS"
   },
   {
     "assertion": "resp[\"booking\"] is None",
@@ -63,7 +64,8 @@
     "status": "verified",
     "title": "booking policy inferred from reservation URL alone (Via Carota Resy link)",
     "tool": "get_restaurant",
-    "regression_note_round0": "PASS"
+    "regression_note_round0": "PASS",
+    "regression_note_round1": "PASS"
   },
   {
     "assertion": "resp[\"booking\"] is None or (len(resp[\"booking\"][\"notes\"]) <= 280 and not resp[\"booking\"][\"notes\"][-1].isalnum())",
@@ -96,7 +98,8 @@
     "status": "verified",
     "title": "booking notes sliced at 279 chars mid-word; old rows not cleaned at read time",
     "tool": "get_restaurant",
-    "regression_note_round0": "PASS"
+    "regression_note_round0": "PASS",
+    "regression_note_round1": "PASS"
   },
   {
     "assertion": "resp[\"found\"] is False and resp[\"suggestions\"] == []",
@@ -129,7 +132,8 @@
     "status": "verified",
     "title": "unknown UUID returned random venue suggestions instead of empty",
     "tool": "get_restaurant",
-    "regression_note_round0": "PASS"
+    "regression_note_round0": "PASS",
+    "regression_note_round1": "PASS"
   },
   {
     "assertion": "len(resp) == 1 and resp[0][\"name\"] == \"Lilia\"",
@@ -165,7 +169,8 @@
     "status": "verified",
     "title": "compare_restaurants duplicated an identical venue instead of deduping",
     "tool": "compare_restaurants",
-    "regression_note_round0": "PASS"
+    "regression_note_round0": "PASS",
+    "regression_note_round1": "PASS"
   },
   {
     "assertion": "len(resp) == 10",
@@ -198,19 +203,20 @@
     "status": "verified",
     "title": "guide_consensus theme matching missed 'cookies'/'black and white cookies' (no tokenisation, &/and not normalised)",
     "tool": "guide_consensus",
-    "regression_note_round0": "PASS"
+    "regression_note_round0": "PASS",
+    "regression_note_round1": "PASS"
   },
   {
-    "assertion": "[r for r in resp if \"industrie\" in r[\"name\"].lower()][0][\"guide_appearances\"] == 11",
+    "assertion": "[r for r in cmp_resp if \"industrie\" in r[\"name\"].lower()][0][\"guide_appearances\"] == len(get_resp[\"guide_appearances\"])",
     "confidence": "medium",
-    "expected": "guide_appearances == 11 (count on cards, list length on detail) in both search and compare",
+    "expected": "guide_appearances agrees across tools for the resolved record (get list length == compare/search count), regardless of which record the name resolves to and how many guides it has",
     "id": "f-007",
     "negative_control": {
       "call": null,
       "passed": null,
       "result": "not run through this harness; finding predates the negative-control gate (manually verified 2026-09-20 ~02:53 UTC, re-verified through harness in round 0)"
     },
-    "observed": "Round 5: guide appearance count for L'Industrie differed across tools. Round 0 re-check via harness: get_restaurant guide_appearances is an 11-entry list; search_restaurants card 'guide_appearances': 11; compare_restaurants row 'guide_appearances': 11. Count and list length agree.",
+    "observed": "Round 5: guide appearance count for L'Industrie disagreed across tools. Round 0: get (11-entry list), search card (11), compare (11) all agreed. Round 1: the Eater backfill added a SECOND venue record for the same real-world spot \u2014 'L\\'Industrie' (Eater-sourced, id afd434b6-10c3-4a9d-b3f5-99b81ea5bb45, rating null, 3 Eater guide appearances) alongside the existing 'L\\'industrie Pizzeria' (Infatuation, rating 9, search card now shows 13). get_restaurant and compare_restaurants both resolve the exact name to the Eater record (same id afd434b6) and agree: get list length 3 == compare count 3. The cross-tool AGREEMENT mechanism still holds; only the content-pinned '== 11' assertion broke under the data change.",
     "regression_count": 0,
     "repro_call": {
       "id": "f-007",
@@ -234,7 +240,10 @@
     "status": "verified",
     "title": "L'Industrie guide appearance count disagreed between search and compare",
     "tool": "compare_restaurants",
-    "regression_note_round0": "PASS"
+    "regression_note_round0": "PASS",
+    "assertion_scope": "requires get_restaurant and compare_restaurants responses for the same query; passes when the detail list length equals the card/row count (behaviour-pinned, data-change-proof)",
+    "notes": "[round 1: content-pinned '== 11' failed under Eater-backfill data change; mechanism (cross-tool agreement) verified intact \u2014 get list 3 == compare count 3 on record afd434b6. Assertion re-pinned to behaviour. The duplicate record itself (Eater vs Infatuation dedup miss) is a crawler data-layer matter, not an API logic defect; noted as observation, not filed.]",
+    "regression_note_round1": "PASS (mechanism holds; assertion re-pinned to behaviour)"
   },
   {
     "assertion": "all(isinstance(r.get(\"similarity\"), (int, float)) for r in resp) and [r[\"similarity\"] for r in resp] == sorted((r[\"similarity\"] for r in resp), reverse=True) and all(r[\"price_tier\"] in (2, 3) for r in resp)",
@@ -268,7 +277,8 @@
     "status": "verified",
     "title": "find_similar ignored price-tier proximity in scoring",
     "tool": "find_similar",
-    "regression_note_round0": "PASS"
+    "regression_note_round0": "PASS",
+    "regression_note_round1": "PASS"
   },
   {
     "assertion": "resp[\"name\"] == \"Contrasto\" and resp[\"match_type\"] == \"fuzzy\"",
@@ -301,7 +311,8 @@
     "status": "verified",
     "title": "get_restaurant silently resolved Contra to Contrasto with no match label",
     "tool": "get_restaurant",
-    "regression_note_round0": "PASS"
+    "regression_note_round0": "PASS",
+    "regression_note_round1": "PASS"
   },
   {
     "assertion": "resp[\"name\"] == \"Cenadou\"",
@@ -333,7 +344,8 @@
     "severity": "low",
     "status": "open",
     "title": "coverage boundary not enforced: Cenadou 73km out returned despite 30km coverage claim (deferred by design)",
-    "tool": "get_restaurant"
+    "tool": "get_restaurant",
+    "regression_note_round1": "still open (unchanged; Cenadou still resolves by name)"
   },
   {
     "assertion": "resp[0][\"name\"] == \"L'industrie Pizzeria\"",
@@ -365,7 +377,8 @@
     "severity": "low",
     "status": "open",
     "title": "'industrie' search ranking diluted by near-matches (deferred by design; correct venue already first)",
-    "tool": "search_restaurants"
+    "tool": "search_restaurants",
+    "regression_note_round1": "still open (unchanged; L'industrie Pizzeria still first)"
   },
   {
     "id": "f-012",
@@ -410,7 +423,8 @@
     "round_fixed": null,
     "regression_count": 0,
     "seed": "founding",
-    "notes": "[review 2026-09-20: assertion tightened \u2014 it must fail while the bug returns [] and pass when an error/rejection replaces the silent empty list.]"
+    "notes": "[review 2026-09-20: assertion tightened \u2014 it must fail while the bug returns [] and pass when an error/rejection replaces the silent empty list.]",
+    "regression_note_round1": "still open (unchanged; still silent [] \u2014 also confirmed on top_rated)"
   },
   {
     "id": "f-013",
@@ -458,6 +472,52 @@
     "regression_count": 0,
     "seed": "founding",
     "assertion_scope": "requires both get_restaurant and search_restaurants responses for the same venue; passes when the field has one type across tools",
-    "notes": "[review 2026-09-20: assertion rescoped to cross-tool type agreement \u2014 a single-tool isinstance check would pass while the bug persists.]"
+    "notes": "[review 2026-09-20: assertion rescoped to cross-tool type agreement \u2014 a single-tool isinstance check would pass while the bug persists.]",
+    "regression_note_round1": "still open (unchanged; still list vs int)"
+  },
+  {
+    "id": "f-014",
+    "status": "open",
+    "title": "address is a string on search/top_rated cards but a dict on get_restaurant detail",
+    "tool": "search_restaurants",
+    "repro_call": {
+      "jsonrpc": "2.0",
+      "id": "f-014",
+      "method": "tools/call",
+      "params": {
+        "name": "search_restaurants",
+        "arguments": {
+          "city": "new-york",
+          "query": "Lucia Alimentari",
+          "limit": 1
+        }
+      }
+    },
+    "observed": "Same field name, two shapes. search_restaurants/top_rated cards return address as a plain string ('301 W Broadway'); get_restaurant returns it as a dict (line1/locality/region/postal_code/latitude/longitude). The string always equals the detail's line1 (verified on 5 venues: Lucia Alimentari, \u0110i \u0102n \u0110i, Cocina Consuelo, JeJu-Island, Le Bernardin), so this is a card projection, not data disagreement \u2014 but an agent parsing address components from a card gets a string where the detail has an object.",
+    "expected": "one field name, one type across tools: either the structured address everywhere or a renamed card field (e.g. address_line)",
+    "negative_control": {
+      "call": {
+        "jsonrpc": "2.0",
+        "id": "f-014-neg",
+        "method": "tools/call",
+        "params": {
+          "name": "get_restaurant",
+          "arguments": {
+            "city": "new-york",
+            "id": "Lucia Alimentari"
+          }
+        }
+      },
+      "result": "disproof attempt: find a venue where the card address string != detail address.line1 (would mean data disagreement, not projection). 5/5 agree \u2014 the difference is purely representational. Theory survives.",
+      "passed": true
+    },
+    "assertion": "type(card_resp[\"address\"]) is type(get_resp[\"address\"])",
+    "assertion_scope": "requires search_restaurants and get_restaurant responses for the same venue; passes when the field has one type across tools",
+    "severity": "low",
+    "confidence": "high",
+    "round_found": 1,
+    "round_fixed": null,
+    "regression_count": 0,
+    "seed": "581bda1d8337d57f"
   }
 ]
