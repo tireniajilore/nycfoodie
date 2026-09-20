@@ -10,5 +10,5 @@ dist/
 nycfoodie-mcp-calls.jsonl
 
 
-src/**/*.js
-src/**/*.d.ts
+**/src/**/*.js
+**/src/**/*.d.ts
