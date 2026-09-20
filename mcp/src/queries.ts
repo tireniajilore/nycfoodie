@@ -142,32 +142,39 @@ function normalizeOccasion(s: string): string {
 }
 
 /**
- * Reject unknown occasion values with the allowed set, like unsupported
- * cities — a typo'd occasion ('date-nite') must not fail silently with [].
- * Match rule: every input token (hyphens/spaces/underscores split) must be
- * a prefix of the corresponding allowed-value token, in order
- * ('date-night' matches 'Date Nights'; 'date-nite' does not). This keeps
- * the documented flexibility while rejecting garbage like 'a' or '---'
- * that a substring test would wrongly accept. The empty string keeps its
- * existing no-filter meaning; a value that normalises to nothing is
- * rejected outright.
+ * Resolve an occasion input to its canonical allowed value, or throw.
+ * Every input token (hyphens/spaces/underscores split) must be a prefix of
+ * the corresponding allowed-value token, in order: 'date-night' and
+ * 'happy_hours' both resolve to their documented labels. Unknown values
+ * ('date-nite', 'BanquetXYZ') and ambiguous prefixes ('s' matches both
+ * 'See & Be Seen' and 'Serious Takeout Operation') are rejected with an
+ * error naming the allowed values — never a silent []. The empty string
+ * keeps its existing no-filter meaning (undefined out); a value that
+ * normalises to nothing is rejected outright.
+ *
+ * The canonical value is what the SQL filter matches on, so validation and
+ * filtering can never disagree about what an input means.
  */
-function requireOccasion(occasion: string | undefined): void {
-  if (!occasion) return;
-  const invalid = () =>
+function canonicalOccasion(occasion: string | undefined): string | undefined {
+  if (!occasion) return undefined;
+  const unsupported = (why: string) =>
     new Error(
-      `Unsupported occasion '${occasion}'. Allowed: ${OCCASION_VALUES.join(", ")}.`
+      `${why} '${occasion}'. Allowed: ${OCCASION_VALUES.join(", ")}.`
     );
   const inputTokens = normalizeOccasion(occasion).split(" ").filter(Boolean);
-  if (inputTokens.length === 0) throw invalid();
-  const ok = OCCASION_VALUES.some((v) => {
+  if (inputTokens.length === 0) throw unsupported("Unsupported occasion");
+  const matches = OCCASION_VALUES.filter((v) => {
     const allowed = normalizeOccasion(v).split(" ");
     return (
       inputTokens.length <= allowed.length &&
       inputTokens.every((tok, i) => allowed[i].startsWith(tok))
     );
   });
-  if (!ok) throw invalid();
+  if (matches.length === 1) return matches[0];
+  if (matches.length === 0) throw unsupported("Unsupported occasion");
+  throw unsupported(
+    `Ambiguous occasion (matches ${matches.map((m) => `'${m}'`).join(", ")})`
+  );
 }
 
 /** Bronx neighborhoods, shared by the "bronx" and "the bronx" keys. */
@@ -516,7 +523,10 @@ export function searchRestaurants(
   sort: "rating" | "guides" | "distance" = "rating"
 ): Record<string, unknown>[] {
   requireCity(db, f.city);
-  requireOccasion(f.occasion);
+  // Canonicalise the occasion BEFORE filtering: the SQL filter matches on
+  // the resolved label, so 'happy_hours' can never pass validation and
+  // then silently match nothing.
+  const occasion = canonicalOccasion(f.occasion);
   // Geo parameters are all-or-nothing: a lone lat, lng or radius_km is a
   // caller error, never silently ignored. lat+lng without a radius searches
   // within a 5 km default.
@@ -542,7 +552,7 @@ export function searchRestaurants(
       );
     }
   }
-  const nf: Filters = { ...f, radiusKm };
+  const nf: Filters = { ...f, radiusKm, occasion };
   const params: unknown[] = [];
   const where = buildWhere(nf, params);
   const order =

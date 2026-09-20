@@ -640,7 +640,7 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
       .optional()
       .describe(
         `Occasion tag. Allowed: ${OCCASION_VALUES.map((v) => `'${v}'`).join(", ")}. ` +
-          "Hyphens and spaces are flexible ('date-night' works). Unknown values are rejected with an error."
+          "Hyphens, spaces and underscores are flexible ('date-night' works); unambiguous prefixes resolve to the full value. Unknown or ambiguous values are rejected with an error."
       ),
     min_rating: z.number().min(0).max(10).optional().describe("Minimum Infatuation rating"),
     price_tier: z.number().int().min(1).max(4).optional().describe("1 ($) to 4 ($$$$)"),
