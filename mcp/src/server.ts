@@ -785,7 +785,7 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
     "guide_consensus",
     {
       description:
-        "Rank restaurants by how many distinct guides feature them, optionally filtered by theme. Use for 'where can't I go wrong' or safest-bet picks. Differs from find_guides: this returns ranked restaurants, not the guides themselves.",
+        "Rank restaurants by how many distinct guides feature them, optionally filtered by theme. Use for 'where can't I go wrong' or safest-bet picks. Differs from find_guides: this returns ranked restaurants, not the guides themselves. Each row carries guide_appearance_count (a number); get_restaurant's guide_appearances is the full entry list.",
       annotations: READ_ONLY,
       inputSchema: {
         city: cityParam,

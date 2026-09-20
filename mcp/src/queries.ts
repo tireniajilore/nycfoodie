@@ -1040,18 +1040,20 @@ export function guideConsensus(
   type ConsensusRow = Record<string, unknown> & {
     id: number;
     rating: number | null;
-    guide_count: number | undefined;
+    guide_appearance_count: number | undefined;
   };
   return (rows as ConsensusRow[])
     .filter((row) => !row.is_closed)
     .map((row) => ({
       ...row,
-      guide_count: countById.get(row.id),
+      // Named guide_appearance_count so the count field never collides with
+      // get_restaurant's guide_appearances entry list (f-013).
+      guide_appearance_count: countById.get(row.id),
       neighborhoods: ((row.neighborhoods as string | null)?.split("|").filter((s) => s.trim()) ?? []),
     }))
     .sort(
       (a, b) =>
-        (b.guide_count ?? 0) - (a.guide_count ?? 0) || (b.rating ?? 0) - (a.rating ?? 0)
+        (b.guide_appearance_count ?? 0) - (a.guide_appearance_count ?? 0) || (b.rating ?? 0) - (a.rating ?? 0)
     )
     .slice(0, limit);
 }
