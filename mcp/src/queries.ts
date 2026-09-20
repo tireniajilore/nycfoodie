@@ -122,6 +122,46 @@ function requireCity(db: Database, city: string): void {
   }
 }
 
+/**
+ * The documented occasion tags. Single source of truth: the tool-schema
+ * description in server.ts is built from this list, so they cannot drift.
+ * Matches exactly the distinct occasion labels in the database.
+ */
+export const OCCASION_VALUES = [
+  "Date Nights",
+  "Happy Hours",
+  "Pre-Theater",
+  "See & Be Seen",
+  "Serious Takeout Operation",
+  "Unique Dining Experiences",
+  "Wasting Your Time & Money",
+] as const;
+
+function normalizeOccasion(s: string): string {
+  return s.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Reject unknown occasion values with the allowed set, like unsupported
+ * cities — a typo'd occasion ('date-nite') must not fail silently with [].
+ * The match rule mirrors the filter itself (hyphen/space-separated tokens
+ * matched in order, unanchored: 'date-night' matches 'Date Nights'), so
+ * every previously-working input keeps working and only inputs that would
+ * have silently returned [] are rejected. The empty string keeps its
+ * existing no-filter meaning.
+ */
+function requireOccasion(occasion: string | undefined): void {
+  if (!occasion) return;
+  const pattern = normalizeOccasion(occasion).split(" ").map(escapeRegExp).join(".*");
+  const re = new RegExp(pattern);
+  const ok = OCCASION_VALUES.some((v) => re.test(normalizeOccasion(v)));
+  if (!ok) {
+    throw new Error(
+      `Unsupported occasion '${occasion}'. Allowed: ${OCCASION_VALUES.join(", ")}.`
+    );
+  }
+}
+
 /** Bronx neighborhoods, shared by the "bronx" and "the bronx" keys. */
 const bronxNeighborhoods = [
   "Belmont", "Castle Hill", "City Island", "Concourse", "Crotona",
@@ -433,8 +473,12 @@ function toCard(
       row.locality
     ),
     cuisines: [...new Set((row.cuisines?.split("|") ?? []).map((s) => s.trim()).filter(Boolean))],
-    address: row.address_line1,
-    guide_appearances: row.guide_count,
+    // Card projections use unambiguous names: the street line is
+    // `address_line` (get_restaurant's `address` is the structured object),
+    // and the guide total is `guide_appearance_count` (get_restaurant's
+    // `guide_appearances` is the entry list).
+    address_line: row.address_line1,
+    guide_appearance_count: row.guide_count,
     closed: row.is_closed === 1,
     // When this venue's data was last crawled — agents should caveat
     // fast-decaying claims (closures especially) on stale values.
@@ -464,6 +508,7 @@ export function searchRestaurants(
   sort: "rating" | "guides" | "distance" = "rating"
 ): Record<string, unknown>[] {
   requireCity(db, f.city);
+  requireOccasion(f.occasion);
   // Geo parameters are all-or-nothing: a lone lat, lng or radius_km is a
   // caller error, never silently ignored. lat+lng without a radius searches
   // within a 5 km default.
@@ -651,10 +696,13 @@ export function getRestaurant(
     )
     .get(r.id) as Record<string, unknown> | undefined;
   if (!row) return null;
-  // Tags and guides stay source-honest: the primary listing's source, so
-  // Infatuation venues keep exactly their Infatuation tags/guides while
-  // Eater-only venues show their Eater tags/guides (possibly none) instead
-  // of vanishing. Never invent an Infatuation review for an Eater-only venue.
+  // Tags stay source-honest: the primary listing's source, so Infatuation
+  // venues keep exactly their Infatuation tags while Eater-only venues show
+  // their Eater tags (possibly none) instead of vanishing. Guides are NOT
+  // source-siloed: a venue lists every guide that includes it, whichever
+  // source the entry came through — guide entries link forward to the
+  // venue's restaurant_id across listings, so the reverse direction must
+  // read across listings too.
   const primarySource = row.primary_source_slug as string;
   const tags = db
     .prepare(
@@ -682,15 +730,18 @@ export function getRestaurant(
       )
       .all(row.primary_listing_id) as { label: string }[]
   ).map((x) => x.label);
+  // Cross-source: every guide entry linked to this venue's restaurant_id,
+  // whichever listing/source it came through (an Eater entry links to the
+  // Infatuation venue's id via its Eater listing).
   const guides = db
     .prepare(
       `SELECT g.title, g.url, ge.position, ge.entry_name, ge.blurb FROM guide_entries ge
        JOIN guides g ON g.id = ge.guide_id
        JOIN source_listings sl ON sl.id = ge.source_listing_id
-       WHERE sl.restaurant_id = ? AND sl.source_slug = ?
+       WHERE sl.restaurant_id = ?
        ORDER BY g.title, ge.position`
     )
-    .all(r.id, primarySource) as Record<string, unknown>[];
+    .all(r.id) as Record<string, unknown>[];
   const review: Record<string, unknown> = {
     title: row.review_title,
     // Honest headline: the source's real headline, or null when it has none
@@ -785,9 +836,10 @@ export function compareRestaurants(
         (full.review as { headline: string | null; summary: string | null } | null)?.headline ??
         truncate((full.review as { summary: string | null } | null)?.summary ?? null, 160) ??
         null,
-      // Same definition as search cards and get_restaurant: distinct guides
-      // across all listings (Round 5: O9).
-      guide_appearances: guideAppearanceCount(db, r.id),
+      // Same definition as search cards: distinct guides across all
+      // listings (Round 5: O9). Named `guide_appearance_count` so the field
+      // never collides with get_restaurant's `guide_appearances` entry list.
+      guide_appearance_count: guideAppearanceCount(db, r.id),
     });
   }
   return out;
@@ -930,12 +982,14 @@ export function guideConsensus(
   // Two-phase: (1) cheap guide-count ranking over all restaurants — no
   // per-restaurant subqueries; (2) details only for the top rows including
   // guide_count ties, so the scalar probes run on a handful of rows.
+  // Votes count across sources: an Eater guide appearance is an editorial
+  // vote like any other, so the source filter stays off here.
   const ranked = db
     .prepare(
       `SELECT sl.restaurant_id AS rid, COUNT(DISTINCT ge.guide_id) AS guide_count
        FROM guide_entries ge
        JOIN guides g ON g.id = ge.guide_id
-       JOIN source_listings sl ON sl.id = ge.source_listing_id AND sl.source_slug = '${SOURCE}'
+       JOIN source_listings sl ON sl.id = ge.source_listing_id
        JOIN restaurants r ON r.id = sl.restaurant_id
        WHERE r.city_slug = ? ${themeCond}
        GROUP BY sl.restaurant_id
@@ -947,26 +1001,21 @@ export function guideConsensus(
   const cutoff = ranked[Math.min(limit, ranked.length) - 1].guide_count;
   const contenders = ranked.filter((row) => row.guide_count >= cutoff);
   const countById = new Map(contenders.map((row) => [row.rid, row.guide_count]));
-  // Primary-listing preference (prose first, then highest rating) as scalar
-  // subqueries: indexed probes, evaluated once per contender.
-  const primaryCol = (col: string) => `(SELECT sl2.${col} FROM source_listings sl2
-    LEFT JOIN reviews rv2 ON rv2.source_listing_id = sl2.id
-    WHERE sl2.restaurant_id = r.id AND sl2.source_slug = '${SOURCE}'
-    ORDER BY (rv2.id IS NOT NULL) DESC, sl2.rating DESC LIMIT 1)`;
+  // Display columns come from each venue's primary listing — the same
+  // Infatuation-first definition every other tool uses — so Eater-only
+  // venues keep their own rating/neighbourhood instead of nulls.
   const placeholders = contenders.map(() => "?").join(",");
   const rows = db
     .prepare(
-      `SELECT r.id, r.name,
-         ${primaryCol("rating")} AS rating,
-         ${primaryCol("price_tier")} AS price_tier,
+      `WITH ${PRIMARY_LISTINGS_CTE}
+       SELECT r.id, r.name,
+         pl.rating, pl.price_tier,
          (SELECT GROUP_CONCAT(t.label, '|') FROM listing_tags lt
           JOIN tags t ON t.id = lt.tag_id
-          JOIN source_listings slx ON slx.id = lt.source_listing_id
-          WHERE slx.restaurant_id = r.id AND slx.source_slug = '${SOURCE}'
-            AND t.kind = 'neighborhood') AS neighborhoods,
-         EXISTS (SELECT 1 FROM source_listings slc
-           WHERE slc.restaurant_id = r.id AND slc.source_slug = '${SOURCE}' AND slc.is_closed = 1) AS is_closed
+          WHERE lt.source_listing_id = pl.id AND t.kind = 'neighborhood') AS neighborhoods,
+         pl.is_closed AS is_closed
        FROM restaurants r
+       JOIN primary_listings pl ON pl.restaurant_id = r.id
        WHERE r.id IN (${placeholders})`
     )
     .all(...contenders.map((row) => row.rid)) as Record<string, unknown>[];

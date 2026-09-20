@@ -28,6 +28,7 @@ import {
   findSimilar,
   getRestaurant,
   guideConsensus,
+  OCCASION_VALUES,
   searchRestaurants,
   suggestRestaurants,
   topRated,
@@ -638,7 +639,8 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
       .string()
       .optional()
       .describe(
-        "Occasion tag. Allowed: 'Date Nights', 'Happy Hours', 'Pre-Theater', 'See & Be Seen', 'Serious Takeout Operation', 'Unique Dining Experiences', 'Wasting Your Time & Money'. Hyphens and spaces are flexible ('date-night' works)."
+        `Occasion tag. Allowed: ${OCCASION_VALUES.map((v) => `'${v}'`).join(", ")}. ` +
+          "Hyphens and spaces are flexible ('date-night' works). Unknown values are rejected with an error."
       ),
     min_rating: z.number().min(0).max(10).optional().describe("Minimum Infatuation rating"),
     price_tier: z.number().int().min(1).max(4).optional().describe("1 ($) to 4 ($$$$)"),
@@ -674,7 +676,7 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
     "search_restaurants",
     {
       description:
-        "Search restaurants by free text, cuisine, neighbourhood, occasion or price, optionally near a point. Use when the user describes what they want (e.g. 'Italian date night in the West Village', 'ramen near me') rather than naming a specific restaurant. Free text matches names, tags, review prose and guide blurbs (e.g. 'cacio e pepe'). Returns compact matches with Infatuation rating (0–10), price tier, address and tags. Known-closed venues are excluded by default. Coverage for city='new-york' is the five boroughs plus the immediate metro (within 30 km of Manhattan). With no query or filters, returns the highest-rated venues.",
+        "Search restaurants by free text, cuisine, neighbourhood, occasion or price, optionally near a point. Use when the user describes what they want (e.g. 'Italian date night in the West Village', 'ramen near me') rather than naming a specific restaurant. Free text matches names, tags, review prose and guide blurbs (e.g. 'cacio e pepe'). Returns compact matches with Infatuation rating (0–10), price tier, address_line and tags. Cards carry guide_appearance_count (a number); get_restaurant's guide_appearances is the full entry list. Known-closed venues are excluded by default. Coverage for city='new-york' is the five boroughs plus the immediate metro (within 30 km of Manhattan). With no query or filters, returns the highest-rated venues.",
       annotations: READ_ONLY,
       inputSchema: {
         query: z.string().optional().describe("Free text, e.g. 'date-night Italian'"),
