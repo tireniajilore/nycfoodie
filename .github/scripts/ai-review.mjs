@@ -124,3 +124,5 @@ if (existing) {
   });
   console.log("Posted new review comment.");
 }
+
+// Test change to trigger the automated reviewer.
