@@ -5,8 +5,11 @@ Writes /tmp/eater_parsed_<slug>.json with map meta + entries list.
 
 Pilot learnings baked in:
 - Entries are `## Name` sections in document order (position = order).
-- Only sections containing BOTH `**Open for:**` and `**Price range:**` are kept
-  (filters sponsored insertions like the Coqodaq US Open ad).
+- A section is an entry if it has at least one Location/Phone/Website list
+  item; this filters sponsored insertions (e.g. the Coqodaq US Open ad) and
+  chrome sections ("More maps in Eater NY", "The Latest").
+- The older template adds `**Open for:**` / `**Price range:**` lines; the
+  newer template omits them, so they are optional.
 - Entries never link to Eater venue pages; the name's website link is found by
   matching the link anchor text against the entry name.
 - Address/phone live in trailing `- [Location...](google maps)` /
@@ -26,10 +29,12 @@ TZ_OFFSETS = {"EDT": "-04:00", "EST": "-05:00", "CDT": "-05:00", "CST": "-06:00"
 
 
 def parse_updated(text):
+    # the byline ("Updated Sep 10, 2026, 1:23 PM EDT") sits below long nav /
+    # image-URL lines, so search a generous window; first match wins
     m = re.search(
         r"[Uu]pdated\s+([A-Z][a-z]{2,8})\s+(\d{1,2}),?\s+(\d{4}),?\s+"
         r"(\d{1,2}):(\d{2})\s*([AP]M)\s*([A-Z]{2,4})?",
-        text[:3000],
+        text[:20000],
     )
     if not m:
         return None
@@ -104,11 +109,14 @@ def parse_address(raw):
 
 
 def clean_blurb(text):
-    # drop image lines and the Location/Phone list items
+    # drop image lines, the Location/Phone list items, and the stray "Link"
+    # line that follows the entry heading in the newer template
     lines = []
     for line in text.split("\n"):
         s = line.strip()
         if not s or s.startswith("![") or re.match(r"^-\s*\[(Location|Phone)", s):
+            continue
+        if s == "Link":
             continue
         lines.append(line)
     text = "\n".join(lines)
@@ -167,13 +175,19 @@ def parse_map(md, meta_title, map_url):
         if name.lower() in {"see more", "more maps in eater ny"}:
             continue
         # colon may sit inside or outside the bold markers (**Price range:** vs
-        # **Price range**:); sponsored insertions lack these lines entirely
+        # **Price range**:); the newer map template omits these metadata lines
+        # entirely, so they are optional. What marks a real entry section is at
+        # least one of the trailing Location/Phone/Website list items, which
+        # sponsored insertions and chrome sections ("More maps...", "The
+        # Latest") lack.
         mo = re.search(r"\*\*Open for:?\*\*:?\s*(.+)", body)
         mp = re.search(r"\*\*Price range:?\*\*:?\s*(\$+(?:\s*-\s*\$+)?)", body)
-        if not mo or not mp:
+        has_contact = re.search(r"^-\s*\[(Location|Phone|LinkVisit website)",
+                                body, re.M)
+        if not has_contact:
             continue
-        open_for = mo.group(1).strip()
-        price = re.sub(r"\s+", "", mp.group(1))
+        open_for = mo.group(1).strip() if mo else None
+        price = re.sub(r"\s+", "", mp.group(1)) if mp else None
         # blurb: after the price line, before the Location item
         blurb_src = body
         if mp:
