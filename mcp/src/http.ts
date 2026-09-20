@@ -84,10 +84,12 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
   const userAgent = req.headers["user-agent"] ?? "";
   const server: McpServer = createMcpServer({ clientIp, userAgent });
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-  res.on("close", () => {
+  // Best-effort teardown of the per-request MCP server + transport.
+  const teardown = () => {
     transport.close().catch(() => undefined);
     server.close().catch(() => undefined);
-  });
+  };
+  res.on("close", teardown);
   try {
     await server.connect(transport);
     const body = req.method === "POST" ? await readBody(req) : undefined;
@@ -97,8 +99,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
       res.writeHead(400, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: String((err as Error)?.message ?? err).slice(0, 200) }));
     }
-    await transport.close().catch(() => undefined);
-    await server.close().catch(() => undefined);
+    await teardown();
   }
 }
 
@@ -254,10 +255,16 @@ function escHtml(s: string): string {
   return s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
+/** Parse an integer query param: default when missing/unparseable, clamped to [min, max]. */
+function clampQueryInt(raw: string | null, def: number, min: number, max: number): number {
+  const n = Number(raw ?? def) || def;
+  return Math.min(Math.max(n, min), max);
+}
+
 /** Server-rendered usage dashboard (no JS, no external assets). */
 function handleAdminUsage(req: IncomingMessage, res: ServerResponse, url: URL): void {
   if (!requireAdmin(req, res, url)) return;
-  const days = Math.min(Math.max(Number(url.searchParams.get("days") ?? 30) || 30, 1), 180);
+  const days = clampQueryInt(url.searchParams.get("days"), 30, 1, 180);
   const stats = readUsageStats(days);
   const maxDay = Math.max(1, ...stats.per_day.map((d) => d.calls));
   const maxTool = Math.max(1, ...stats.per_tool.map((t) => t.calls));
@@ -336,7 +343,7 @@ function handleAdminUsageJson(
   url: URL
 ): void {
   if (!requireAdmin(req, res, url)) return;
-  const days = Math.min(Math.max(Number(url.searchParams.get("days") ?? 30) || 30, 1), 180);
+  const days = clampQueryInt(url.searchParams.get("days"), 30, 1, 180);
   res.writeHead(200, { "Content-Type": "application/json" });
   res.end(JSON.stringify(readUsageStats(days)));
 }

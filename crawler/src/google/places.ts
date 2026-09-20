@@ -108,18 +108,16 @@ export async function verifyPlace(
     }
   }
   if (!best || bestDist > MATCH_RADIUS_M) return null;
-  const winner = best;
 
   return {
-    placeId: winner.id,
-    displayName: winner.displayName?.text ?? name,
-    businessStatus: winner.businessStatus ?? null,
-    formattedAddress: winner.formattedAddress ?? null,
-    lat: winner.location?.latitude ?? null,
-    lng: winner.location?.longitude ?? null,
+    placeId: best.id,
+    displayName: best.displayName?.text ?? name,
+    businessStatus: best.businessStatus ?? null,
+    formattedAddress: best.formattedAddress ?? null,
+    lat: best.location?.latitude ?? null,
+    lng: best.location?.longitude ?? null,
     distanceM: Math.round(bestDist),
     confidence: bestDist <= 75 ? "high" : "low",
   };
 }
 
-export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

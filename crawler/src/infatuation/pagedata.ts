@@ -5,10 +5,8 @@
 // which contains the same pageProps.initialApolloState as __NEXT_DATA__.
 // No auth needed; same polite fetching as the GraphQL client.
 
-import { USER_AGENT } from "./client.js";
+import { INFATUATION_BASE_URL, USER_AGENT } from "./client.js";
 import { POLITE_DELAY_MS, sleep } from "./graphql.js";
-
-export const INFATUATION_BASE = "https://www.theinfatuation.com";
 
 export interface EnrichedVenue {
   name: string | null;
@@ -112,7 +110,7 @@ export function richTextToMarkdown(doc: unknown): string {
   return parts.join("\n\n");
 }
 
-function slugify(s: string): string {
+export function slugify(s: string): string {
   return s.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
@@ -142,7 +140,7 @@ export async function fetchBuildId(
   kind: "reviews" | "guides" = "reviews"
 ): Promise<string> {
   if (cachedBuildId) return cachedBuildId;
-  const res = await fetch(`${INFATUATION_BASE}/${city}/${kind}/${slug}`, {
+  const res = await fetch(`${INFATUATION_BASE_URL}/${city}/${kind}/${slug}`, {
     headers: { "user-agent": USER_AGENT, accept: "text/html" },
     signal: AbortSignal.timeout(20_000),
   });
@@ -154,14 +152,15 @@ export async function fetchBuildId(
   return cachedBuildId;
 }
 
-/** Fetch the raw _next/data JSON for a review page. */
-export async function fetchReviewPageData(
+/** Fetch the raw _next/data JSON for a review or guide page. */
+export async function fetchPageData(
   city: string,
   slug: string,
+  kind: "reviews" | "guides",
   buildId?: string
 ): Promise<ApolloState> {
-  const id = buildId ?? (await fetchBuildId(city, slug));
-  const url = `${INFATUATION_BASE}/_next/data/${id}/${city}/reviews/${slug}.json`;
+  const id = buildId ?? (await fetchBuildId(city, slug, kind));
+  const url = `${INFATUATION_BASE_URL}/_next/data/${id}/${city}/${kind}/${slug}.json`;
   const res = await fetch(url, {
     headers: { "user-agent": USER_AGENT, accept: "application/json" },
     signal: AbortSignal.timeout(20_000),
@@ -169,7 +168,7 @@ export async function fetchReviewPageData(
   if (res.status === 404 && !buildId) {
     // Build id rotated mid-run; refresh once and retry.
     cachedBuildId = null;
-    return fetchReviewPageData(city, slug, await fetchBuildId(city, slug));
+    return fetchPageData(city, slug, kind, await fetchBuildId(city, slug, kind));
   }
   if (!res.ok) throw new Error(`Page data fetch failed: HTTP ${res.status} for ${url}`);
   const json = (await res.json()) as { pageProps?: { initialApolloState?: ApolloState } };
@@ -236,7 +235,7 @@ export function extractReview(state: ApolloState): EnrichedReview | null {
       instagram: (venue["instagram"] as string) ?? null,
       price: typeof venue["price"] === "number" ? (venue["price"] as number) : null,
       closed: typeof venue["closed"] === "boolean" ? (venue["closed"] as boolean) : null,
-      closedStatus: typeof venue["closedStatus"] === "string" ? (venue["closedStatus"] as string) : null,
+      closedStatus: typeof venue["closedStatus"] === "string" ? venue["closedStatus"] : null,
       lat: typeof latlong["lat"] === "number" ? (latlong["lat"] as number) : null,
       lon: typeof latlong["lon"] === "number" ? (latlong["lon"] as number) : null,
       reservationUrl: (reservation?.["reservationUrl"] as string) ?? null,
@@ -253,11 +252,9 @@ export async function enrichReview(
   delayMs = POLITE_DELAY_MS
 ): Promise<EnrichedReview | null> {
   await sleep(delayMs);
-  const state = await fetchReviewPageData(city, slug);
+  const state = await fetchPageData(city, slug, "reviews");
   return extractReview(state);
 }
-
-export { slugify };
 
 /* ------------------------------------------------------------------ */
 /* Guides                                                              */
@@ -277,29 +274,6 @@ export interface GuideData {
   publishedAt: string | null;
   updatedAt: string | null;
   entries: GuideEntryData[];
-}
-
-/** Fetch the raw _next/data JSON for a guide page. */
-export async function fetchGuidePageData(
-  city: string,
-  slug: string,
-  buildId?: string
-): Promise<ApolloState> {
-  const id = buildId ?? (await fetchBuildId(city, slug, "guides"));
-  const url = `${INFATUATION_BASE}/_next/data/${id}/${city}/guides/${slug}.json`;
-  const res = await fetch(url, {
-    headers: { "user-agent": USER_AGENT, accept: "application/json" },
-    signal: AbortSignal.timeout(20_000),
-  });
-  if (res.status === 404 && !buildId) {
-    cachedBuildId = null;
-    return fetchGuidePageData(city, slug, await fetchBuildId(city, slug, "guides"));
-  }
-  if (!res.ok) throw new Error(`Guide page data fetch failed: HTTP ${res.status} for ${url}`);
-  const json = (await res.json()) as { pageProps?: { initialApolloState?: ApolloState } };
-  const state = json.pageProps?.initialApolloState;
-  if (!state) throw new Error("Guide page data missing initialApolloState");
-  return state;
 }
 
 /**
@@ -332,18 +306,18 @@ export function extractGuide(state: ApolloState, guideSlug: string): GuideData |
     entries.push({
       rank: entries.length + 1,
       sourceKey: name,
-      headline: typeof cap["headline"] === "string" ? (cap["headline"] as string) : null,
+      headline: typeof cap["headline"] === "string" ? cap["headline"] : null,
       blurb: content?.json ? richTextToMarkdown(content.json) : null,
     });
   }
 
   return {
     sourceKey: guideSlug,
-    title: typeof guide["title"] === "string" ? (guide["title"] as string) : guideSlug,
-    description: typeof guide["preview"] === "string" ? (guide["preview"] as string) : null,
+    title: typeof guide["title"] === "string" ? guide["title"] : guideSlug,
+    description: typeof guide["preview"] === "string" ? guide["preview"] : null,
     publishedAt:
       sys?.firstPublishedAt ??
-      (typeof guide["publishDate"] === "string" ? (guide["publishDate"] as string) : null),
+      (typeof guide["publishDate"] === "string" ? guide["publishDate"] : null),
     updatedAt: sys?.publishedAt ?? null,
     entries,
   };
@@ -357,7 +331,7 @@ export async function listGuideSlugs(city: string): Promise<string[]> {
   const seen = new Set<string>();
   const slugs: string[] = [];
   for (const sitemap of ["sitemap-1.xml", "sitemap-latest.xml"]) {
-    const res = await fetch(`${INFATUATION_BASE}/${sitemap}`, {
+    const res = await fetch(`${INFATUATION_BASE_URL}/${sitemap}`, {
       headers: { "user-agent": USER_AGENT },
       signal: AbortSignal.timeout(30_000),
     });

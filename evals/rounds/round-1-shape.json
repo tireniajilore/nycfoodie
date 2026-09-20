@@ -1,0 +1,12 @@
+{
+  "seed": "581bda1d8337d57f",
+  "persona": "user with an impossible constraint",
+  "angle": "idempotency",
+  "focus_tools": [
+    "find_guides",
+    "top_rated",
+    "guide_consensus"
+  ],
+  "depth": 12,
+  "order": "depth-first on a single suspected defect"
+}

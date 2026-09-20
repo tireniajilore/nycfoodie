@@ -1,5 +1,4 @@
 // nycfoodie MCP server factory (shared by stdio and HTTP transports).
-// nycfoodie MCP server (stdio).
 //
 // Read-only access to the NYCfoodie database: structured editorial
 // restaurant recommendations. City is a parameter on every tool.
@@ -522,6 +521,15 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
     };
   }
 
+  /** Not-found payload shared by get_restaurant and find_similar. */
+  function notFound(query: string, city: string) {
+    return json({
+      found: false,
+      query,
+      suggestions: suggestRestaurants(db, city, query).map((s) => s.name),
+    });
+  }
+
   /** Stamp the dataset vintage onto every response: top-level for objects,
    *  per record for arrays so existing shapes stay backward-compatible. */
   function stampDataAsOf(data: unknown): unknown {
@@ -543,10 +551,7 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
   ): (args: TArgs) => Promise<TResult> {
     return async (args: TArgs) => {
       const start = Date.now();
-      const city =
-        typeof (args as Record<string, unknown>).city === "string"
-          ? ((args as Record<string, unknown>).city as string)
-          : null;
+      const city = typeof args.city === "string" ? args.city : null;
       const usage = (ok: boolean) =>
         recordUsage(writeDb, {
           ts: new Date().toISOString(),
@@ -688,7 +693,7 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
           db,
           filtersFrom(args),
           args.limit ?? 10,
-          args.sort === "guides" ? "guides" : "rating"
+          args.sort ?? "rating"
         )
       )
     )
@@ -712,11 +717,7 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
     logged("get_restaurant", async ({ id, city, include_prose }) => {
       const r = getRestaurant(db, city, id, include_prose ?? false);
       if (r) return json(r);
-      return json({
-        found: false,
-        query: id,
-        suggestions: suggestRestaurants(db, city, id).map((s) => s.name),
-      });
+      return notFound(id, city);
     })
   );
 
@@ -774,11 +775,7 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
     logged("find_similar", async ({ id, city, limit }) => {
       const r = findSimilar(db, city, id, limit ?? 10);
       if (r) return json(r);
-      return json({
-        found: false,
-        query: id,
-        suggestions: suggestRestaurants(db, city, id).map((s) => s.name),
-      });
+      return notFound(id, city);
     })
   );
 
@@ -848,20 +845,14 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
  */
 export function readFeedback(limit = 50, since?: string): Record<string, unknown>[] {
   const lim = Math.min(Math.max(Math.floor(limit) || 50, 1), 200);
-  const rows =
-    since !== undefined
-      ? db
-          .prepare(
-            `SELECT id, created_at, tool_name, rating, comment FROM feedback
-             WHERE created_at > ? ORDER BY created_at DESC LIMIT ?`
-          )
-          .all(since, lim)
-      : db
-          .prepare(
-            `SELECT id, created_at, tool_name, rating, comment FROM feedback
-             ORDER BY created_at DESC LIMIT ?`
-          )
-          .all(lim);
+  // One query shape: the optional since-bound becomes a no-op predicate
+  // (created_at > '' is always true) instead of a second query.
+  const rows = db
+    .prepare(
+      `SELECT id, created_at, tool_name, rating, comment FROM feedback
+       WHERE created_at > ? ORDER BY created_at DESC LIMIT ?`
+    )
+    .all(since ?? "", lim);
   return rows as Record<string, unknown>[];
 }
 

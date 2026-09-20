@@ -107,21 +107,6 @@ export function guideAppearanceCount(
   return row.c;
 }
 
-/** Did the client ask for this venue exactly (id or name), or did we
- *  fuzzy-resolve it? (Round 5: I1) */
-export function matchType(
-  db: Database,
-  city: string,
-  idOrName: string
-): "exact" | "fuzzy" {
-  const exact = db
-    .prepare(
-      `SELECT 1 FROM restaurants WHERE city_slug = ? AND (id = ? OR lower(name) = lower(?))`
-    )
-    .get(city, idOrName, idOrName);
-  return exact ? "exact" : "fuzzy";
-}
-
 /** Throw a clear error for unsupported cities instead of silently returning []. */
 function requireCity(db: Database, city: string): void {
   const row = db.prepare("SELECT slug FROM cities WHERE slug = ?").get(city) as
@@ -136,6 +121,16 @@ function requireCity(db: Database, city: string): void {
     );
   }
 }
+
+/** Bronx neighborhoods, shared by the "bronx" and "the bronx" keys. */
+const bronxNeighborhoods = [
+  "Belmont", "Castle Hill", "City Island", "Concourse", "Crotona",
+  "Fieldston", "Fordham", "Highbridge", "Kingsbridge", "Melrose",
+  "Morris Park", "Mott Haven", "Parkchester", "Pelham Bay", "Port Morris",
+  "Riverdale", "Soundview", "South Bronx", "The Bronx", "Throggs Neck",
+  "Unionport", "University Heights", "Van Nest", "Wakefield",
+  "Westchester Square", "Williamsbridge/East Bronx",
+];
 
 // Borough → neighborhood tag labels. A neighborhood filter naming a borough
 // expands to all of its neighborhoods, so "Brooklyn" includes Williamsburg,
@@ -175,22 +170,8 @@ const BOROUGHS: Record<string, string[]> = {
     "Rockaway Park", "South Ozone Park", "South Richmond Hill", "Sunnyside",
     "Whitestone", "Woodhaven", "Woodside",
   ],
-  bronx: [
-    "Belmont", "Castle Hill", "City Island", "Concourse", "Crotona",
-    "Fieldston", "Fordham", "Highbridge", "Kingsbridge", "Melrose",
-    "Morris Park", "Mott Haven", "Parkchester", "Pelham Bay", "Port Morris",
-    "Riverdale", "Soundview", "South Bronx", "The Bronx", "Throggs Neck",
-    "Unionport", "University Heights", "Van Nest", "Wakefield",
-    "Westchester Square", "Williamsbridge/East Bronx",
-  ],
-  "the bronx": [
-    "Belmont", "Castle Hill", "City Island", "Concourse", "Crotona",
-    "Fieldston", "Fordham", "Highbridge", "Kingsbridge", "Melrose",
-    "Morris Park", "Mott Haven", "Parkchester", "Pelham Bay", "Port Morris",
-    "Riverdale", "Soundview", "South Bronx", "The Bronx", "Throggs Neck",
-    "Unionport", "University Heights", "Van Nest", "Wakefield",
-    "Westchester Square", "Williamsbridge/East Bronx",
-  ],
+  bronx: bronxNeighborhoods,
+  "the bronx": bronxNeighborhoods,
   "staten island": [
     "Brighton Heights", "Castleton Corners", "Charleston", "Dongan Hills",
     "Great Kills", "Heartland Village", "New Dorp", "New Springville",
@@ -533,11 +514,9 @@ export function searchRestaurants(
   });
   if (geo) {
     cards = cards.filter((c) => c.d !== undefined && c.d <= radiusKm);
-    if (sort === "distance" || sort === "rating") {
-      cards.sort((a, b) =>
-        sort === "distance" ? a.d! - b.d! : b.card.rating as number - (a.card.rating as number)
-      );
-    }
+    // SQL can't order by the computed haversine distance, so distance sort
+    // happens here. Rating/guide sorts are already handled by the ORDER BY.
+    if (sort === "distance") cards.sort((a, b) => a.d! - b.d!);
   }
   return cards.map((c) => c.card);
 }
@@ -657,7 +636,7 @@ export function getRestaurant(
     .prepare(
       `WITH ${PRIMARY_LISTINGS_CTE}
       SELECT r.name,
-        pl.id AS primary_listing_id,
+        pl.id AS primary_listing_id, pl.source_slug AS primary_source_slug,
         pl.rating, pl.price_tier, pl.price_label, pl.address_line1, pl.locality,
         pl.region, pl.postal_code, pl.latitude, pl.longitude, pl.phone, pl.website,
         pl.reservation_url, pl.reservation_platform, pl.booking_policy, pl.wait_notes,
@@ -676,11 +655,7 @@ export function getRestaurant(
   // Infatuation venues keep exactly their Infatuation tags/guides while
   // Eater-only venues show their Eater tags/guides (possibly none) instead
   // of vanishing. Never invent an Infatuation review for an Eater-only venue.
-  const primarySource = (
-    db
-      .prepare("SELECT source_slug FROM source_listings WHERE id = ?")
-      .get(row.primary_listing_id) as { source_slug: string }
-  ).source_slug;
+  const primarySource = row.primary_source_slug as string;
   const tags = db
     .prepare(
       `SELECT t.kind, t.label FROM listing_tags lt
@@ -732,7 +707,12 @@ export function getRestaurant(
     name: row.name,
     // How the query resolved: "exact" (id or name matched verbatim) or
     // "fuzzy" (prefix/fuzzy resolution, e.g. "Sema" -> Semma). Round 5: I1.
-    match_type: matchType(db, city, idOrName),
+    // resolveRestaurant tries the exact predicate first, so an exact input
+    // can only have resolved exactly — no second query needed.
+    match_type:
+      r.id === idOrName || r.name.toLowerCase() === idOrName.toLowerCase()
+        ? "exact"
+        : "fuzzy",
     crawled_at: row.last_crawled_at,
     rating: row.rating,
     price_tier: row.price_tier,

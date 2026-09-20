@@ -2,7 +2,7 @@
 // Polite by construction: a delay between requests, modest page sizes,
 // honest user agent, and abortable timeouts.
 
-import { USER_AGENT } from "./client.js";
+import { INFATUATION_BASE_URL, USER_AGENT } from "./client.js";
 import type {
   PostSearchInput,
   RawPostGuide,
@@ -10,13 +10,12 @@ import type {
   SearchPostsPage,
 } from "./types.js";
 
-export const GRAPHQL_ENDPOINT =
-  "https://www.theinfatuation.com/direct/api/post-search/public/graphql";
+export const GRAPHQL_ENDPOINT = `${INFATUATION_BASE_URL}/direct/api/post-search/public/graphql`;
 
 const HEADERS: Record<string, string> = {
   "Content-Type": "application/json",
-  Origin: "https://www.theinfatuation.com",
-  Referer: "https://www.theinfatuation.com/",
+  Origin: INFATUATION_BASE_URL,
+  Referer: `${INFATUATION_BASE_URL}/`,
   "User-Agent": USER_AGENT,
 };
 

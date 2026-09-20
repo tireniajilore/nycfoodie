@@ -1,0 +1,56 @@
+[
+  {
+    "id": "inv-agree-get-0",
+    "tool": "get_restaurant",
+    "args": {
+      "city": "new-york",
+      "id": "Lucia Alimentari"
+    }
+  },
+  {
+    "id": "inv-agree-get-1",
+    "tool": "get_restaurant",
+    "args": {
+      "city": "new-york",
+      "id": "\u0110i \u0102n \u0110i"
+    }
+  },
+  {
+    "id": "inv-agree-get-2",
+    "tool": "get_restaurant",
+    "args": {
+      "city": "new-york",
+      "id": "Cocina Consuelo"
+    }
+  },
+  {
+    "id": "inv-agree-get-3",
+    "tool": "get_restaurant",
+    "args": {
+      "city": "new-york",
+      "id": "JeJu-Island"
+    }
+  },
+  {
+    "id": "inv-agree-get-4",
+    "tool": "get_restaurant",
+    "args": {
+      "city": "new-york",
+      "id": "Le Bernardin"
+    }
+  },
+  {
+    "id": "inv-agree-cmp",
+    "tool": "compare_restaurants",
+    "args": {
+      "city": "new-york",
+      "restaurants": [
+        "Lucia Alimentari",
+        "\u0110i \u0102n \u0110i",
+        "Cocina Consuelo",
+        "JeJu-Island",
+        "Le Bernardin"
+      ]
+    }
+  }
+]

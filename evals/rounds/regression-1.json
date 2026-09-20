@@ -1,0 +1,116 @@
+[
+  {
+    "id": "f-001",
+    "tool": "get_restaurant",
+    "args": {
+      "city": "new-york",
+      "id": "Ramen By Ra"
+    }
+  },
+  {
+    "id": "f-002",
+    "tool": "get_restaurant",
+    "args": {
+      "city": "new-york",
+      "id": "Via Carota"
+    }
+  },
+  {
+    "id": "f-003",
+    "tool": "get_restaurant",
+    "args": {
+      "city": "new-york",
+      "id": "Lilia"
+    }
+  },
+  {
+    "id": "f-004",
+    "tool": "get_restaurant",
+    "args": {
+      "city": "new-york",
+      "id": "00000000-0000-0000-0000-000000000000"
+    }
+  },
+  {
+    "id": "f-005",
+    "tool": "compare_restaurants",
+    "args": {
+      "city": "new-york",
+      "restaurants": [
+        "Lilia",
+        "Lilia"
+      ]
+    }
+  },
+  {
+    "id": "f-006",
+    "tool": "guide_consensus",
+    "args": {
+      "city": "new-york",
+      "theme": "cookies"
+    }
+  },
+  {
+    "id": "f-007",
+    "tool": "compare_restaurants",
+    "args": {
+      "city": "new-york",
+      "restaurants": [
+        "L'Industrie",
+        "Lilia"
+      ]
+    }
+  },
+  {
+    "id": "f-008",
+    "tool": "find_similar",
+    "args": {
+      "city": "new-york",
+      "id": "Lilia",
+      "limit": 10
+    }
+  },
+  {
+    "id": "f-009",
+    "tool": "get_restaurant",
+    "args": {
+      "city": "new-york",
+      "id": "Contra"
+    }
+  },
+  {
+    "id": "f-010a",
+    "tool": "get_restaurant",
+    "args": {
+      "city": "new-york",
+      "id": "Cenadou"
+    }
+  },
+  {
+    "id": "f-010b",
+    "tool": "search_restaurants",
+    "args": {
+      "city": "new-york",
+      "query": "industrie"
+    }
+  },
+  {
+    "id": "f-012",
+    "tool": "search_restaurants",
+    "args": {
+      "city": "new-york",
+      "occasion": "BanquetXYZ"
+    }
+  },
+  {
+    "id": "f-013",
+    "tool": "compare_restaurants",
+    "args": {
+      "city": "new-york",
+      "restaurants": [
+        "L'Industrie",
+        "Lilia"
+      ]
+    }
+  }
+]

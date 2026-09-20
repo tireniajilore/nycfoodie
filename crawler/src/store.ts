@@ -148,7 +148,6 @@ function tagFromPath(
   const slug = pathSlug(attrPath) ?? (label ? slugify(label) : null);
   if (!slug) return;
   const cleanLabel = label?.trim() || slug;
-  if (!cleanLabel) return;
   tagListing(listingId, upsertTag(citySlug, kind, slug, cleanLabel));
 }
 
@@ -212,6 +211,70 @@ function matchOrCreateRestaurant(
 export interface ListingResult {
   listingId: string;
   restaurantId: string;
+}
+
+/** Nullable review prose fields, shared by both crawl paths. */
+interface ReviewFields {
+  title: string | null;
+  headline: string | null;
+  summary: string | null;
+  body: string | null;
+  rating: number | null;
+  author: string | null;
+  publishedAt: string | null;
+}
+
+/** Replace a review's dish list wholesale (delete + positional re-insert). */
+function replaceDishes(
+  db: ReturnType<typeof getDb>,
+  reviewId: string,
+  dishes: Array<{ name: string; description: string | null }>
+): void {
+  db.prepare(`DELETE FROM dishes WHERE review_id = ?`).run(reviewId);
+  dishes.forEach((d, i) => {
+    db.prepare(
+      `INSERT INTO dishes (id, review_id, position, name, description) VALUES (?, ?, ?, ?, ?)`
+    ).run(randomUUID(), reviewId, i + 1, d.name, d.description);
+  });
+}
+
+/** Upsert the review row for a listing and replace its dishes. One copy —
+ *  used by both upsertReviewListing and applyEnrichment. */
+function upsertReviewRow(
+  db: ReturnType<typeof getDb>,
+  listingId: string,
+  fields: ReviewFields,
+  dishes: Array<{ name: string; description: string | null }>,
+  sourceUrl: string | null,
+  ts: string
+): void {
+  const reviewId = randomUUID();
+  db.prepare(
+    `INSERT INTO reviews (id, source_listing_id, title, headline, summary, body_text, rating, author, url, published_at, updated_at, last_crawled_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (source_listing_id) DO UPDATE SET
+       title = excluded.title, headline = excluded.headline, summary = excluded.summary,
+       body_text = excluded.body_text, rating = excluded.rating, author = excluded.author,
+       url = excluded.url, published_at = excluded.published_at, updated_at = excluded.updated_at,
+       last_crawled_at = excluded.last_crawled_at`
+  ).run(
+    reviewId,
+    listingId,
+    fields.title,
+    fields.headline,
+    fields.summary,
+    fields.body,
+    fields.rating,
+    fields.author,
+    sourceUrl,
+    fields.publishedAt,
+    null,
+    ts
+  );
+  const rev = db
+    .prepare(`SELECT id FROM reviews WHERE source_listing_id = ?`)
+    .get(listingId) as { id: string };
+  replaceDishes(db, rev.id, dishes);
 }
 
 /** Upsert one review node (layer A) plus optional enrichment (layer B). */
@@ -294,9 +357,7 @@ export function upsertReviewListing(
     first_seen_at: existing?.first_seen_at ?? ts,
     last_seen_at: ts,
     last_crawled_at: ts,
-    checksum: null as string | null,
   };
-  row.checksum = checksumListing(raw);
 
   const cols = Object.keys(row);
   const placeholders = cols.map(() => "?").join(", ");
@@ -331,55 +392,25 @@ export function upsertReviewListing(
 
   // Review + dishes from enrichment.
   if (enriched) {
-    const reviewId = randomUUID();
-    db.prepare(
-      `INSERT INTO reviews (id, source_listing_id, title, headline, summary, body_text, rating, author, url, published_at, updated_at, last_crawled_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (source_listing_id) DO UPDATE SET
-         title = excluded.title, headline = excluded.headline, summary = excluded.summary,
-         body_text = excluded.body_text, rating = excluded.rating, author = excluded.author,
-         url = excluded.url, published_at = excluded.published_at, updated_at = excluded.updated_at,
-         last_crawled_at = excluded.last_crawled_at`
-    ).run(
-      reviewId,
+    upsertReviewRow(
+      db,
       listingId,
-      enriched.title,
-      enriched.headline,
-      enriched.preview,
-      enriched.bodyMarkdown || null,
-      enriched.rating,
-      enriched.author,
+      {
+        title: enriched.title,
+        headline: enriched.headline,
+        summary: enriched.preview,
+        body: enriched.bodyMarkdown || null,
+        rating: enriched.rating,
+        author: enriched.author,
+        publishedAt: enriched.publishedAt,
+      },
+      enriched.dishes,
       sourceUrl,
-      enriched.publishedAt,
-      null,
       ts
     );
-    const rev = db
-      .prepare(`SELECT id FROM reviews WHERE source_listing_id = ?`)
-      .get(listingId) as { id: string };
-    db.prepare(`DELETE FROM dishes WHERE review_id = ?`).run(rev.id);
-    enriched.dishes.forEach((d, i) => {
-      db.prepare(
-        `INSERT INTO dishes (id, review_id, position, name, description) VALUES (?, ?, ?, ?, ?)`
-      ).run(randomUUID(), rev.id, i + 1, d.name, d.description);
-    });
   }
 
   return { listingId, restaurantId };
-}
-
-function checksumListing(raw: RawPostReview): string {
-  const s = JSON.stringify([
-    raw.placeName,
-    raw.placeRatingNumber,
-    raw.placePriceIndicatorCode,
-    raw.headline,
-    raw.shortDescriptionText,
-    raw.updateTimestamp,
-  ]);
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;
-  return (h >>> 0).toString(16);
 }
 
 /** Read the saved pagination cursor for (source, city, collection), if any. */
@@ -433,12 +464,12 @@ export function stampDatasetBuiltAt(): void {
   ).run(ts, ts);
 }
 
-export type { GooglePlaceMatch } from "./google/places.js";
+import type { GooglePlaceMatch } from "./google/places.js";
 
 /** Write a Google Places verification result onto the canonical restaurant. */
 export function recordGoogleVerification(
-  restaurantId: number,
-  match: import("./google/places.js").GooglePlaceMatch,
+  restaurantId: string,
+  match: GooglePlaceMatch,
   checkedAt: string
 ): void {
   getDb()
@@ -452,7 +483,7 @@ export function recordGoogleVerification(
 }
 
 /** Mark a restaurant as checked-but-unmatched so it isn't retried immediately. */
-export function recordGoogleCheckedNoMatch(restaurantId: number, checkedAt: string): void {
+export function recordGoogleCheckedNoMatch(restaurantId: string, checkedAt: string): void {
   getDb()
     .prepare(`UPDATE restaurants SET google_last_checked_at = ? WHERE id = ?`)
     .run(checkedAt, restaurantId);
@@ -606,38 +637,22 @@ export function applyEnrichment(
     listingId
   );
 
-  const reviewId = randomUUID();
-  db.prepare(
-    `INSERT INTO reviews (id, source_listing_id, title, headline, summary, body_text, rating, author, url, published_at, updated_at, last_crawled_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT (source_listing_id) DO UPDATE SET
-       title = excluded.title, headline = excluded.headline, summary = excluded.summary,
-       body_text = excluded.body_text, rating = excluded.rating, author = excluded.author,
-       url = excluded.url, published_at = excluded.published_at, updated_at = excluded.updated_at,
-       last_crawled_at = excluded.last_crawled_at`
-  ).run(
-    reviewId,
+  upsertReviewRow(
+    db,
     listingId,
-    enriched.title ?? null,
-    enriched.headline ?? null,
-    enriched.preview ?? null,
-    enriched.bodyMarkdown || null,
-    enriched.rating ?? null,
-    enriched.author ?? null,
+    {
+      title: enriched.title,
+      headline: enriched.headline,
+      summary: enriched.preview,
+      body: enriched.bodyMarkdown || null,
+      rating: enriched.rating,
+      author: enriched.author,
+      publishedAt: enriched.publishedAt,
+    },
+    enriched.dishes,
     sourceUrl,
-    enriched.publishedAt ?? null,
-    null,
     ts
   );
-  const rev = db
-    .prepare(`SELECT id FROM reviews WHERE source_listing_id = ?`)
-    .get(listingId) as { id: string };
-  db.prepare(`DELETE FROM dishes WHERE review_id = ?`).run(rev.id);
-  enriched.dishes.forEach((d, i) => {
-    db.prepare(
-      `INSERT INTO dishes (id, review_id, position, name, description) VALUES (?, ?, ?, ?, ?)`
-    ).run(randomUUID(), rev.id, i + 1, d.name, d.description ?? null);
-  });
 
   for (const label of enriched.perfectFor ?? []) {
     tagListing(listingId, upsertTag(citySlug, "occasion", slugify(label), label));
@@ -648,16 +663,16 @@ export function applyEnrichment(
   citySlug: string,
   limit: number,
   recheckDays: number
-): Array<{ id: number; name: string; lat: number; lng: number; best_rating: number | null }> {
+): Array<{ id: string; name: string; lat: number; lng: number; best_rating: number | null }> {
   return getDb()
     .prepare(
       `SELECT r.id, r.name, sl.latitude AS lat, sl.longitude AS lng,
               MAX(rv.rating) AS best_rating
        FROM restaurants r
        JOIN source_listings sl ON sl.restaurant_id = r.id AND sl.source_slug = ?
-       JOIN cities c ON c.id = sl.city_id AND c.slug = ?
-       LEFT JOIN reviews rv ON rv.listing_id = sl.id
-       WHERE sl.latitude IS NOT NULL AND sl.longitude IS NOT NULL
+       LEFT JOIN reviews rv ON rv.source_listing_id = sl.id
+       WHERE r.city_slug = ?
+         AND sl.latitude IS NOT NULL AND sl.longitude IS NOT NULL
          AND (r.google_last_checked_at IS NULL
               OR r.google_last_checked_at < datetime('now', '-' || ? || ' days'))
        GROUP BY r.id
@@ -665,7 +680,7 @@ export function applyEnrichment(
        LIMIT ?`
     )
     .all(SOURCE_SLUG, citySlug, recheckDays, limit) as Array<{
-    id: number;
+    id: string;
     name: string;
     lat: number;
     lng: number;
