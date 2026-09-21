@@ -896,7 +896,19 @@ export interface UsageStats {
   calls_today: number;
   per_day: { day: string; calls: number; clients: number }[];
   per_tool: { tool: string; calls: number }[];
-  recent: { ts: string; tool: string; city: string | null; latency_ms: number | null; ok: number }[];
+  /** Per-client activity for the window: one entry per anonymised client
+   *  fingerprint (truncated SHA-256 — privacy-safe, not reversible). Capped
+   *  at the 200 most active clients by call count so the payload stays
+   *  bounded on the admin-only endpoint. */
+  per_client: {
+    client_hash: string | null;
+    total_calls: number;
+    days_active: number;
+    first_seen: string;
+    last_seen: string;
+    per_tool: { tool: string; calls: number }[];
+  }[];
+  recent: { ts: string; tool: string; city: string | null; client_hash: string | null; latency_ms: number | null; ok: number }[];
 }
 
 /**
@@ -932,9 +944,53 @@ export function readUsageStats(days = 30): UsageStats {
        GROUP BY tool ORDER BY calls DESC`
     )
     .all(since) as { tool: string; calls: number }[];
+  // Per-client activity: one row per anonymised fingerprint. NULL hashes
+  // (calls recorded before fingerprinting, or without a request context)
+  // group into a single bucket. Capped at the 200 most active so the
+  // payload stays bounded; ordering ties are irrelevant (calls only).
+  const clientRows = db
+    .prepare(
+      `SELECT client_hash,
+              COUNT(*) AS calls,
+              COUNT(DISTINCT substr(ts, 1, 10)) AS days_active,
+              MIN(ts) AS first_seen,
+              MAX(ts) AS last_seen
+       FROM usage_log WHERE ts >= ?
+       GROUP BY client_hash ORDER BY calls DESC LIMIT 200`
+    )
+    .all(since) as {
+    client_hash: string | null;
+    calls: number;
+    days_active: number;
+    first_seen: string;
+    last_seen: string;
+  }[];
+  const clientTools = db
+    .prepare(
+      `SELECT client_hash, tool, COUNT(*) AS calls FROM usage_log
+       WHERE ts >= ? GROUP BY client_hash, tool ORDER BY calls DESC`
+    )
+    .all(since) as { client_hash: string | null; tool: string; calls: number }[];
+  // GROUP BY treats NULL client_hash as one group in both queries, so a
+  // plain map keyed on the hash (with a sentinel for null) joins cleanly.
+  const toolsByClient = new Map<string, { tool: string; calls: number }[]>();
+  for (const r of clientTools) {
+    const key = r.client_hash ?? "\0";
+    const arr = toolsByClient.get(key) ?? [];
+    arr.push({ tool: r.tool, calls: r.calls });
+    toolsByClient.set(key, arr);
+  }
+  const perClient = clientRows.map((r) => ({
+    client_hash: r.client_hash,
+    total_calls: r.calls,
+    days_active: r.days_active,
+    first_seen: r.first_seen,
+    last_seen: r.last_seen,
+    per_tool: toolsByClient.get(r.client_hash ?? "\0") ?? [],
+  }));
   const recent = db
     .prepare(
-      `SELECT ts, tool, city, latency_ms, ok FROM usage_log
+      `SELECT ts, tool, city, client_hash, latency_ms, ok FROM usage_log
        ORDER BY id DESC LIMIT 50`
     )
     .all() as UsageStats["recent"];
@@ -946,6 +1002,7 @@ export function readUsageStats(days = 30): UsageStats {
     calls_today: callsToday,
     per_day: perDay,
     per_tool: perTool,
+    per_client: perClient,
     recent,
   };
 }
