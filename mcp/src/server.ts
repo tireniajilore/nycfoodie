@@ -965,12 +965,30 @@ export function readUsageStats(days = 30): UsageStats {
     first_seen: string;
     last_seen: string;
   }[];
+  // Tool mix per client, aggregated only over the clients selected above —
+  // building the predicate from those exact hashes (rather than re-running
+  // the top-200 in SQL) keeps the two queries in sync even on a count tie
+  // at the LIMIT boundary. Placeholders only, no value interpolation.
+  const topHashes = clientRows.map((r) => r.client_hash);
+  const nonNullHashes = topHashes.filter((h): h is string => h !== null);
+  const includeNull = topHashes.length > nonNullHashes.length;
+  const hashPred =
+    nonNullHashes.length > 0
+      ? `(u.client_hash IN (${nonNullHashes.map(() => "?").join(",")})${
+          includeNull ? " OR u.client_hash IS NULL" : ""
+        })`
+      : `(u.client_hash IS NULL)`;
   const clientTools = db
     .prepare(
-      `SELECT client_hash, tool, COUNT(*) AS calls FROM usage_log
-       WHERE ts >= ? GROUP BY client_hash, tool ORDER BY calls DESC`
+      `SELECT u.client_hash, u.tool, COUNT(*) AS calls FROM usage_log u
+       WHERE u.ts >= ? AND ${hashPred}
+       GROUP BY u.client_hash, u.tool ORDER BY calls DESC`
     )
-    .all(since) as { client_hash: string | null; tool: string; calls: number }[];
+    .all(since, ...nonNullHashes) as {
+    client_hash: string | null;
+    tool: string;
+    calls: number;
+  }[];
   // GROUP BY treats NULL client_hash as one group in both queries, so a
   // plain map keyed on the hash (with a sentinel for null) joins cleanly.
   const toolsByClient = new Map<string, { tool: string; calls: number }[]>();

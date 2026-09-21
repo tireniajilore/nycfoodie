@@ -16,12 +16,14 @@ const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dbSrc = join(root, "..", "nycfoodie.db");
 const TOKEN = "test-admin-token";
 
-const iso = (d) => d.toISOString();
-const daysAgo = (n, h = 12) => {
-  const d = new Date(Date.now() - n * 24 * 60 * 60 * 1000);
-  d.setUTCHours(h, 0, 0, 0);
-  return iso(d);
-};
+// All seed timestamps derive from one base clock as fixed hour offsets, so
+// window assertions hold no matter when the test runs: rows 1h ago are
+// inside any days>=1 window, rows 25h+ ago are outside a 24h window, and
+// rows 61d ago are outside a 30d window.
+const SEED_BASE = Date.now();
+const agoHours = (h) => new Date(SEED_BASE - h * 3600 * 1000).toISOString();
+const agoDays = (d) => agoHours(d * 24);
+const utcDay = (ts) => ts.slice(0, 10);
 
 function seedUsage(db) {
   const ins = db.prepare(
@@ -30,20 +32,20 @@ function seedUsage(db) {
   );
   const A = "aaaaaaaaaaaaaaaa";
   const B = "bbbbbbbbbbbbbbbb";
-  // Client A: 5 calls across 3 distinct days, two tools.
-  ins.run(daysAgo(2), "search_restaurants", "new-york", A, 40, 1);
-  ins.run(daysAgo(2, 13), "search_restaurants", "new-york", A, 42, 1);
-  ins.run(daysAgo(1), "search_restaurants", "new-york", A, 38, 1);
-  ins.run(daysAgo(1, 14), "get_restaurant", "new-york", A, 25, 1);
-  ins.run(daysAgo(0), "get_restaurant", "new-york", A, 30, 1);
-  // Client B: 2 calls, one day.
-  ins.run(daysAgo(0), "top_rated", "new-york", B, 50, 1);
-  ins.run(daysAgo(0, 13), "top_rated", "new-york", B, 55, 0);
+  // Client A: 5 calls, two tools, spread over 25h+ so at least two UTC
+  // days are always covered; exact day count derived from the seed.
+  const aTimes = [agoHours(50), agoHours(49), agoHours(26), agoHours(25), agoHours(1)];
+  const aTools = ["search_restaurants", "search_restaurants", "search_restaurants", "get_restaurant", "get_restaurant"];
+  aTimes.forEach((ts, i) => ins.run(ts, aTools[i], "new-york", A, 40, 1));
+  // Client B: 2 calls sharing one timestamp — deterministically one day.
+  const bTime = agoHours(2);
+  ins.run(bTime, "top_rated", "new-york", B, 50, 1);
+  ins.run(bTime, "top_rated", "new-york", B, 55, 0);
   // Null fingerprint bucket: 1 call.
-  ins.run(daysAgo(0), "find_guides", "new-york", null, 60, 1);
+  ins.run(agoHours(1), "find_guides", "new-york", null, 60, 1);
   // Outside a 30-day window: must be excluded.
-  ins.run(daysAgo(60), "search_restaurants", "new-york", "cccccccccccccccc", 40, 1);
-  return { A, B };
+  ins.run(agoDays(61), "search_restaurants", "new-york", "cccccccccccccccc", 40, 1);
+  return { A, B, aDays: new Set(aTimes.map(utcDay)).size };
 }
 
 async function withHttpServer(dbPath, fn) {
@@ -103,7 +105,7 @@ test("per_client breakdown in /admin/usage.json", async () => {
     // Wipe the fixture's own telemetry rows so the assertions below are
     // deterministic regardless of what the copied DB contains.
     db.exec("DELETE FROM usage_log");
-    const { A, B } = seedUsage(db);
+    const { A, B, aDays } = seedUsage(db);
     db.close();
 
     await withHttpServer(dbPath, async (port) => {
@@ -126,7 +128,8 @@ test("per_client breakdown in /admin/usage.json", async () => {
       const [a, b, n] = stats.per_client;
       assert.equal(a.client_hash, A);
       assert.equal(a.total_calls, 5);
-      assert.equal(a.days_active, 3);
+      assert.equal(a.days_active, aDays);
+      assert.ok(aDays >= 2, "seed must span multiple UTC days");
       assert.ok(a.first_seen < a.last_seen);
       assert.deepEqual(a.per_tool, [
         { tool: "search_restaurants", calls: 3 },
@@ -139,14 +142,15 @@ test("per_client breakdown in /admin/usage.json", async () => {
       assert.equal(n.client_hash, null);
       assert.equal(n.total_calls, 1);
 
-      // The 60-day-old client is outside the window.
+      // The 61-day-old client is outside the window.
       assert.ok(!stats.per_client.some((c) => c.client_hash === "cccccccccccccccc"));
 
       // Recent rows carry the client hash.
       assert.ok(stats.recent.length > 0);
       assert.ok("client_hash" in stats.recent[0]);
 
-      // Window narrowing: days=1 keeps only today's rows.
+      // Window narrowing: days=1 keeps only rows from the last 24h, i.e.
+      // just A's most recent call.
       const res1 = await fetch(`http://127.0.0.1:${port}/admin/usage.json?days=1`, {
         headers: auth,
       });
@@ -154,6 +158,7 @@ test("per_client breakdown in /admin/usage.json", async () => {
       const a1 = s1.per_client.find((c) => c.client_hash === A);
       assert.equal(a1.total_calls, 1);
       assert.equal(a1.days_active, 1);
+      assert.deepEqual(a1.per_tool, [{ tool: "get_restaurant", calls: 1 }]);
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });
