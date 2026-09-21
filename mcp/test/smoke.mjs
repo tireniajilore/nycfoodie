@@ -8,16 +8,30 @@ import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import Database from "better-sqlite3";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dbSrc = join(root, "..", "nycfoodie.db");
-
-const VENUES = ["Lilia", "Via Carota", "Tatiana", "Semma", "Katz's Delicatessen"];
 
 async function withServer(fn) {
   const dir = mkdtempSync(join(tmpdir(), "nycfoodie-smoke-"));
   const db = join(dir, "test.db");
   copyFileSync(dbSrc, db);
+  // Pick test venues from the fixture DB itself so the test doesn't depend
+  // on specific venue names surviving dataset changes. Any five eater-linked
+  // venues exercise the alias and cap contracts.
+  const probe = new Database(db, { readonly: true });
+  const VENUES = probe
+    .prepare(
+      `SELECT r.name FROM restaurants r
+       WHERE EXISTS (SELECT 1 FROM source_listings sl
+                     WHERE sl.restaurant_id = r.id AND sl.source_slug = 'eater')
+       ORDER BY r.name LIMIT 5`
+    )
+    .all()
+    .map((r) => r.name);
+  probe.close();
+  assert.ok(VENUES.length >= 5, "fixture DB needs at least 5 eater-linked venues");
   const child = spawn("node", [join(root, "dist", "index.js")], {
     env: {
       ...process.env,
@@ -61,10 +75,11 @@ async function withServer(fn) {
       capabilities: {},
       clientInfo: { name: "smoke", version: "1" },
     });
-    // Drain the initialize response.
+    // Drain the initialize response, then complete the MCP handshake.
     await new Promise((r) => setTimeout(r, 800));
     pump();
-    await fn(rpc);
+    child.stdin.write(JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) + "\n");
+    await fn(rpc, VENUES);
   } finally {
     clearInterval(timer);
     child.kill();
@@ -74,54 +89,52 @@ async function withServer(fn) {
   }
 }
 
-const payloadText = (msg) => {
-  assert.ok(msg.result, `expected result, got error: ${JSON.stringify(msg.error)}`);
-  return msg.result.content[0].text;
-};
-const payloadJson = (msg) => JSON.parse(payloadText(msg));
-
 await test("schema quick wins", async (t) => {
-  await withServer(async (rpc) => {
+  await withServer(async (rpc, VENUES) => {
+    const toolText = (msg) => {
+      assert.ok(msg.result, `expected result, got error: ${JSON.stringify(msg.error)}`);
+      return msg.result.content[0].text;
+    };
+
     await t.test("get_restaurant accepts the name alias", async () => {
-      const p = payloadJson(
-        await rpc("tools/call", { name: "get_restaurant", arguments: { name: "Lilia", city: "new-york" } })
-      );
-      assert.equal(p.name, "Lilia");
+      const p = JSON.parse(toolText(
+        await rpc("tools/call", { name: "get_restaurant", arguments: { name: VENUES[0], city: "new-york" } })
+      ));
+      assert.equal(p.name, VENUES[0]);
       assert.equal(p.match_type, "exact");
     });
 
-    await t.test("get_restaurant without id or name returns a descriptive error", async () => {
-      const p = payloadJson(
-        await rpc("tools/call", { name: "get_restaurant", arguments: { city: "new-york" } })
-      );
-      assert.ok(p.error.includes("'id'"), `unexpected error: ${p.error}`);
+    await t.test("get_restaurant without id or name returns a tool error", async () => {
+      const m = await rpc("tools/call", { name: "get_restaurant", arguments: { city: "new-york" } });
+      assert.equal(m.result?.isError, true);
+      assert.match(toolText(m), /needs 'id'/);
     });
 
     await t.test("find_similar accepts the name alias", async () => {
-      const p = payloadJson(
-        await rpc("tools/call", { name: "find_similar", arguments: { name: "Lilia", city: "new-york", limit: 2 } })
-      );
+      const p = JSON.parse(toolText(
+        await rpc("tools/call", { name: "find_similar", arguments: { name: VENUES[0], city: "new-york", limit: 2 } })
+      ));
       assert.ok(Array.isArray(p) && p.length > 0);
     });
 
     await t.test("compare_restaurants accepts the ids alias with 4 items", async () => {
-      const p = payloadJson(
+      const p = JSON.parse(toolText(
         await rpc("tools/call", {
           name: "compare_restaurants",
           arguments: { ids: VENUES.slice(0, 4), city: "new-york" },
         })
-      );
+      ));
       assert.equal(p.length, 4);
       assert.ok(p.every((r) => r.found));
     });
 
     await t.test("compare_restaurants accepts 5 items via restaurants", async () => {
-      const p = payloadJson(
+      const p = JSON.parse(toolText(
         await rpc("tools/call", {
           name: "compare_restaurants",
           arguments: { restaurants: VENUES.slice(0, 5), city: "new-york" },
         })
-      );
+      ));
       assert.equal(p.length, 5);
     });
 
@@ -136,11 +149,10 @@ await test("schema quick wins", async (t) => {
       assert.match(m.result.content[0].text, /at most 5|Invalid arguments/);
     });
 
-    await t.test("compare_restaurants without restaurants or ids returns a descriptive error", async () => {
-      const p = payloadJson(
-        await rpc("tools/call", { name: "compare_restaurants", arguments: { city: "new-york" } })
-      );
-      assert.ok(p.error.includes("'restaurants'"), `unexpected error: ${p.error}`);
+    await t.test("compare_restaurants without restaurants or ids returns a tool error", async () => {
+      const m = await rpc("tools/call", { name: "compare_restaurants", arguments: { city: "new-york" } });
+      assert.equal(m.result?.isError, true);
+      assert.match(toolText(m), /needs 'restaurants'/);
     });
   });
 });

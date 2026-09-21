@@ -522,6 +522,16 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
     };
   }
 
+  /** Tool-level error (isError) for input the schema can't express, e.g.
+   *  "at least one of id/name is required". A real tool error, not a
+   *  successful payload that happens to contain an error key. */
+  function toolError(message: string) {
+    return {
+      content: [{ type: "text" as const, text: message }],
+      isError: true as const,
+    };
+  }
+
   /** Not-found payload shared by get_restaurant and find_similar. */
   function notFound(query: string, city: string) {
     return json({
@@ -720,9 +730,7 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
     logged("get_restaurant", async ({ id, name, city, include_prose }) => {
       const key = id ?? name;
       if (!key)
-        return json({
-          error: "get_restaurant needs 'id' (a UUID or exact name); 'name' works as an alias.",
-        });
+        return toolError("get_restaurant needs 'id' (a UUID or exact name); 'name' works as an alias.");
       const r = getRestaurant(db, city, key, include_prose ?? false);
       if (r) return json(r);
       return notFound(key, city);
@@ -754,9 +762,7 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
     logged("compare_restaurants", async ({ restaurants, ids, city }) => {
       const list = restaurants ?? ids;
       if (!list)
-        return json({
-          error: "compare_restaurants needs 'restaurants' (2–5 ids or names); 'ids' works as an alias.",
-        });
+        return toolError("compare_restaurants needs 'restaurants' (2–5 ids or names); 'ids' works as an alias.");
       return json(compareRestaurants(db, city, list));
     })
   );
@@ -798,9 +804,7 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
     logged("find_similar", async ({ id, name, city, limit }) => {
       const key = id ?? name;
       if (!key)
-        return json({
-          error: "find_similar needs 'id' (a UUID or exact name); 'name' works as an alias.",
-        });
+        return toolError("find_similar needs 'id' (a UUID or exact name); 'name' works as an alias.");
       const r = findSimilar(db, city, key, limit ?? 10);
       if (r) return json(r);
       return notFound(key, city);
