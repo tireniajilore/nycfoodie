@@ -1,6 +1,8 @@
 # Spec: Eater-only venue enrichment ("Half 2")
 
-Status: proposal, rev 2 — revised against GPT-5.5 spec review (2026-09-21).
+Status: proposal, rev 3 — feasibility spike complete (2026-09-21); crawler
+design revised against spike findings. Proceeding on the user's explicit
+authorisation after the ToS finding was disclosed.
 Fixes the skeleton-record problem for the 404 Eater-only restaurants (of
 6,159 total) that have no Infatuation listing.
 
@@ -44,23 +46,42 @@ the dataset came from a one-off ingestion that was never committed.
 
 ## 4. Design
 
-### 4.1 Committed Eater ingestion — gated on a feasibility spike
+### 4.1 Committed Eater ingestion — spike complete, maps-only crawler
 
-New `crawler/src/eater/` module replacing the uncommitted one-off. Before
-building it, a read-only spike must verify:
+New `crawler/src/eater/` module replacing the uncommitted one-off. The
+read-only feasibility spike ran 2026-09-21 (deep-research, live verification)
+and returned a **conditional no-go**: technically feasible, but the PMC Terms
+of Use §9 expressly prohibit automated scraping. Proceeding on the user's
+explicit authorisation (2026-09-21) after that finding was disclosed.
 
-- Eater numeric venue IDs are stable and consistently exposed across all 126
-  captured guides (they are the proposed `source_key`).
-- `ny.eater.com/robots.txt` posture for our crawler's user-agent, Vox Media
-  ToS stance, polite rate limits, and anti-bot behaviour.
-- Page-structure change handling: snapshot raw HTML per crawl so a Chorus
-  CMS change is detectable and re-parseable.
+Spike findings that change the crawler design:
 
-Only if the spike passes does crawler construction proceed. Per entry capture:
-name, blurb, position, address, phone, website, and the "Also featured in"
-cross-references (cheap guide-discovery signal). Reuse the existing
-`matchOrCreateRestaurant` in `crawler/src/store.ts` (already source-generic),
-subject to the merge rules in §4.5.
+- **No venue IDs exposed.** Map entries do not link to `/venue/` pages and
+  carry no numeric IDs in their markup (verified live on two NY map pages).
+  The `eater:{venue_id}` `source_key` design is dropped. Entries are keyed by
+  the existing `{guide-slug}/{venue-slug}` composite, unchanged from the
+  one-off ingestion.
+- **Map pages carry everything.** Name, editorial blurb, street address,
+  phone, and website link are present on every entry (25 entries sampled).
+  No venue-page crawl is needed for enrichment data; the crawler targets
+  `/maps/` pages only. (Raw-source/JSON-LD inspection was inconclusive —
+  recheck once if venue-level fields are ever needed.)
+- **robots.txt allows an honest custom UA** on `/maps/` (no crawl-delay);
+  library-default UAs (python-requests, Scrapy, ApifyBot, FirecrawlAgent,
+  Crawl4AI, GPTBot et al.) are restricted to `/sp/` only and must not be
+  used. No JS bot wall was observed from a datacenter IP.
+- **Polite crawl parameters:** 1 req/s, 1 concurrent connection, descriptive
+  UA with contact address, honour 429/503 with backoff, never crawl
+  `/search`, cache aggressively. At 1 rps the 126 known maps take ~2–3 min.
+  Guide discovery via `ny.eater.com/maps` pagination (10 pages observed);
+  the sitemap index carries articles only, no venue/map sitemap.
+- Page-structure change handling: snapshot raw HTML per crawl so a CMS
+  change is detectable and re-parseable.
+
+Per entry capture: name, blurb, position, address, phone, website, and the
+"Also featured in" cross-references (cheap guide-discovery signal). Reuse
+the existing `matchOrCreateRestaurant` in `crawler/src/store.ts` (already
+source-generic), subject to the merge rules in §4.5.
 
 ### 4.2 Blurb → venue prose: explicit structured array
 
@@ -133,20 +154,24 @@ flow through once created (to be re-verified in implementation, with a test).
 
 - **Provenance**: every eater-scoped tag row records the rule that assigned it
   (`assigned_by`: e.g. `guide-theme-map:v1`, `backfill:neighborhood:v1`).
-  Backfill writes are idempotent (re-runnable), auditable (rule + timestamp
-  per row), and reversible (delete by `assigned_by` prefix).
+  This requires a schema change: a numbered migration adds
+  `assigned_by TEXT` and `assigned_at TEXT` to `listing_tags`
+  (both NULL for pre-existing Infatuation rows — their provenance is
+  "crawler", recorded in code, not per row). Backfill writes are idempotent
+  (re-runnable), auditable (rule + timestamp per row), and reversible
+  (delete by `assigned_by` prefix).
 - **No clobbering**: the backfill never writes, modifies, or deletes
   Infatuation-scoped tags. Eater tags are additive.
 - **Uniqueness**: `UNIQUE(source_slug, source_key)` on `source_listings`.
-  Historical Eater rows lacking numeric venue IDs fall back to normalised
-  name + address matching; if unmatched rows exceed a 5% threshold the
-  backfill stops for manual review instead of creating duplicates.
+  Historical Eater rows lack numeric venue IDs by design (the spike found
+  none exposed); matching falls back to normalised name + address, and if
+  unmatched rows exceed a 5% threshold the backfill stops for manual review
+  instead of creating duplicates.
 - **Negative controls** (asserted by the backfill and the test suite): no
   Eater-only venue gains a rating, a price_tier, or an occasion tag.
 
-No numbered migration is required for v1 (tags need no schema change; blurb
-surfacing is read-time). If a materialised summary is wanted later, add it
-then.
+The `editorial_blurbs` surfacing is read-time (no schema change); the only
+numbered migration in v1 is the `listing_tags` provenance columns.
 
 ## 5. Backfill plan (no recrawl)
 
@@ -167,13 +192,19 @@ then.
 
 ## 7. Rollout
 
-1. Feasibility spike (§4.1) — go/no-go for the crawler.
-2. PR with backfill script + read-path changes → automated AI review → merge.
-3. Backfill dry-run → review → write run (production data change, off-peak).
-4. Railway auto-deploy → live verification: `get_restaurant(name=...)` on an
+1. Feasibility spike (§4.1) — complete 2026-09-21: conditional no-go on ToS
+   grounds; proceeding on the user's explicit authorisation. Design revised
+   to maps-only crawl with composite source keys (no venue IDs exposed).
+2. PR with migration (listing_tags provenance) + backfill script + read-path
+   changes → 3 review rounds (self → automated GPT → adversarial re-review
+   of the revised diff + own tests/live verification) → merge.
+3. Crawler PR (`crawler/src/eater/`, polite fetcher, snapshot/reparse) →
+   same 3 review rounds → merge.
+4. Backfill dry-run → review → write run (production data change, off-peak).
+5. Railway auto-deploy → live verification: `get_restaurant(name=...)` on an
    Eater-only venue shows `editorial_blurbs`; `search_restaurants(cuisine=...)`
    includes it; before/after recall metrics compared.
-5. Rollback: delete eater-scoped tags by `assigned_by` prefix; read-path
+6. Rollback: delete eater-scoped tags by `assigned_by` prefix; read-path
    change reverts with the deploy. Monitor query latency (new joins) for one
    deploy cycle.
 
@@ -198,3 +229,10 @@ Per GPT-5.5 review (2026-09-21), decided as follows:
   attribution stated; provenance/idempotence/reversibility specified;
   merge uniqueness and manual-review threshold defined; rollout given
   ordering, dry-run, metrics, and rollback.
+- 2026-09-21: feasibility spike complete (rev 3) — conditional no-go on
+  PMC ToS §9 grounds; user explicitly authorised proceeding. Design
+  changes: dropped `eater:{venue_id}` source keys (no IDs exposed on map
+  pages), maps-only crawler (entries carry name/blurb/address/phone/
+  website), custom UA requirement (library defaults are robots-blocked),
+  1 rps / 1 concurrent politeness parameters, provenance migration for
+  `listing_tags` (resolves the assigned_by schema inconsistency).
