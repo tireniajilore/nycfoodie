@@ -143,3 +143,67 @@ test("fetchRobotsTxt fails closed on 5xx", async () => {
     server.close();
   }
 });
+
+test("fetchRobotsTxt follows same-origin robots redirects", async () => {
+  const { createServer } = await import("node:http");
+  const server = createServer((req, res) => {
+    if (req.url === "/robots.txt") {
+      res.writeHead(302, { location: "/robots2.txt" });
+      res.end();
+    } else {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("User-agent: *\nDisallow: /search\n");
+    }
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const port = server.address().port;
+  try {
+    const text = await fetchRobotsTxt(`http://127.0.0.1:${port}`, UA, 5000);
+    assert.match(text, /Disallow: \/search/);
+  } finally {
+    server.close();
+  }
+});
+
+test("fetchRobotsTxt refuses a robots redirect that leaves the origin", async () => {
+  const { createServer } = await import("node:http");
+  const evil = createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "text/plain" });
+    res.end("User-agent: *\nDisallow: /\n");
+  });
+  await new Promise((r) => evil.listen(0, "127.0.0.1", r));
+  const evilPort = evil.address().port;
+  const server = createServer((_req, res) => {
+    res.writeHead(302, { location: `http://127.0.0.1:${evilPort}/robots.txt` });
+    res.end();
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const port = server.address().port;
+  try {
+    await assert.rejects(
+      () => fetchRobotsTxt(`http://127.0.0.1:${port}`, UA, 5000),
+      /leaves origin/
+    );
+  } finally {
+    server.close();
+    evil.close();
+  }
+});
+
+test("fetchRobotsTxt gives up on a redirect loop", async () => {
+  const { createServer } = await import("node:http");
+  const server = createServer((_req, res) => {
+    res.writeHead(302, { location: "/robots.txt" });
+    res.end();
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const port = server.address().port;
+  try {
+    await assert.rejects(
+      () => fetchRobotsTxt(`http://127.0.0.1:${port}`, UA, 5000),
+      /too many redirects/
+    );
+  } finally {
+    server.close();
+  }
+});

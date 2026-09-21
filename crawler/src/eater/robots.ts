@@ -164,13 +164,36 @@ export async function fetchRobotsTxt(
   userAgent: string = EATER_USER_AGENT,
   timeoutMs: number = EATER_FETCH_TIMEOUT_MS
 ): Promise<string> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const res = await fetch(`${baseUrl.replace(/\/+$/, "")}/robots.txt`, {
-      headers: { "User-Agent": userAgent },
-      signal: ctrl.signal,
-    });
+  const root = baseUrl.replace(/\/+$/, "");
+  const origin = new URL(root).origin;
+  let current = `${root}/robots.txt`;
+  // Manual redirect handling: a robots.txt redirect is followed only within
+  // the same origin, so a hostile redirect can never pull a request
+  // off-origin before the crawler's stricter checks apply.
+  for (let hop = 0; hop < 3; hop++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+    let res: Response;
+    try {
+      res = await fetch(current, {
+        headers: { "User-Agent": userAgent },
+        redirect: "manual",
+        signal: ctrl.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (res.status >= 300 && res.status < 400) {
+      const location = res.headers.get("location");
+      await res.arrayBuffer().catch(() => undefined);
+      if (!location) throw new Error("robots.txt redirect without a Location header");
+      const next = new URL(location, current);
+      if (next.origin !== origin) {
+        throw new Error(`robots.txt redirect leaves origin: ${next.origin}`);
+      }
+      current = next.href;
+      continue;
+    }
     if (!res.ok) {
       // RFC 9309 §2.3: 5xx means "do not crawl"; other failures are treated
       // as "no robots.txt". Fail closed on 5xx only.
@@ -178,7 +201,6 @@ export async function fetchRobotsTxt(
       return "";
     }
     return await res.text();
-  } finally {
-    clearTimeout(timer);
   }
+  throw new Error("robots.txt: too many redirects");
 }

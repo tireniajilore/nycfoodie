@@ -33,6 +33,20 @@ test("parseMapIndex returns null next when there is none", () => {
   assert.equal(nextPageUrl, null);
 });
 
+test("parseMapIndex canonicalises away tracking queries and fragments", () => {
+  const html = `
+    <a href="/maps/best-nyc?utm_source=newsletter&utm_medium=email">Best</a>
+    <a href="/maps/best-nyc#top">Best fragment</a>
+    <a href="/maps/best-nyc">Best plain</a>
+    <a href="/maps/sushi-guide?fbclid=abc">Sushi</a>`;
+  const { mapUrls } = parseMapIndex(html, PAGE);
+  // One entry per map: query/hash variants collapse to the canonical URL.
+  assert.deepEqual(mapUrls, [
+    "https://ny.eater.com/maps/best-nyc",
+    "https://ny.eater.com/maps/sushi-guide",
+  ]);
+});
+
 function stubSource(pages) {
   // pages: Map from URL -> { mapLinks: string[], next: string | null }
   return {

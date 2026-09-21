@@ -2,9 +2,10 @@
 // robots check -> index discovery -> polite fetch -> parse -> (dry run).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { closeDb } from "nycfoodie-db";
 import { assertMapsCrawlable, crawlEaterMaps } from "../dist/eater/crawl.js";
 
@@ -313,19 +314,72 @@ test("a 304 on the /maps index does not silently discover zero maps", async () =
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const baseUrl = `http://127.0.0.1:${server.address().port}`;
   const dir = mkdtempSync(join(tmpdir(), "eater-crawl-"));
+  const dbPath = join(dir, "test.db");
   const snapshotDir = join(dir, "snapshots");
-  // Warm the cache the way a previous successful write run would have.
+  // Warm the cache the way a previous successful write run would have. The
+  // cache file is scoped to the resolved --db path.
   mkdirSync(snapshotDir, { recursive: true });
+  const scopeHash = createHash("sha1").update(resolve(dbPath), "utf8").digest("hex").slice(0, 12);
   writeFileSync(
-    join(snapshotDir, ".fetch-cache.json"),
+    join(snapshotDir, `.fetch-cache-${scopeHash}.json`),
     JSON.stringify({ [`${baseUrl}/maps`]: { etag: '"stale-idx"', lastModified: null, sha256: "deadbeef" } })
   );
   try {
-    const stats = await crawlEaterMaps({ baseUrl, write: false, snapshotDir });
+    const stats = await crawlEaterMaps({ baseUrl, write: false, dbPath, snapshotDir });
     assert.equal(stats.mapsDiscovered, 2);
     assert.equal(stats.mapsFetched, 2);
   } finally {
     server.close();
+  }
+});
+
+test("a warm cache with a fresh database at the same path still ingests everything", async () => {
+  const { createServer: cs } = await import("node:http");
+  const server = cs((req, res) => {
+    const routes = routesFor(server.address().port);
+    const body = routes[req.url];
+    if (body === undefined) {
+      res.writeHead(404);
+      res.end();
+      return;
+    }
+    // Behave like a real conditional server: 304 when the client has state.
+    if (req.headers["if-none-match"]) {
+      res.writeHead(304);
+      res.end();
+      return;
+    }
+    res.writeHead(200, { "content-type": "text/html", etag: '"v1"' });
+    res.end(body);
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const dir = mkdtempSync(join(tmpdir(), "eater-crawl-"));
+  const dbPath = join(dir, "test.db");
+  const snapshotDir = join(dir, "snapshots");
+  try {
+    // First write run ingests everything and warms the cache.
+    const first = await crawlEaterMaps({ baseUrl, write: true, dbPath, snapshotDir });
+    assert.equal(first.mapsNotModified, 0);
+    assert.equal(first.listingsUpserted, 3);
+    // Fresh database at the same path, warm snapshot dir kept. Without the
+    // crawl-state gate the second run would 304-skip every map and ingest
+    // nothing — "not modified" must mean "already ingested by THIS db".
+    closeDb();
+    for (const suffix of ["", "-wal", "-shm", "-journal"]) {
+      try {
+        unlinkSync(dbPath + suffix);
+      } catch {
+        /* already gone */
+      }
+    }
+    const second = await crawlEaterMaps({ baseUrl, write: true, dbPath, snapshotDir });
+    assert.equal(second.mapsNotModified, 0);
+    assert.equal(second.mapsFetched, 2);
+    assert.equal(second.listingsUpserted, 3);
+  } finally {
+    server.close();
+    closeDb();
   }
 });
 

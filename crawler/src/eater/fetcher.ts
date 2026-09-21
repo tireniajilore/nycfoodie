@@ -91,6 +91,20 @@ export interface PoliteFetcherOptions {
    * the /maps/ prefix probe passed.
    */
   urlAllowed?: (url: string) => boolean;
+  /**
+   * Namespace for the on-disk fetch cache. The cache file is
+   * `.fetch-cache-<sha1(scope)>.json` inside snapshotDir, so two different
+   * databases sharing one snapshot directory never share change-detection
+   * state. The crawler passes the resolved --db path.
+   */
+  cacheScope?: string;
+  /**
+   * Skip loading any persisted cache. The crawler sets this in write mode
+   * when the DB shows no prior Eater crawl: on a fresh database "not
+   * modified" must never skip ingestion that never happened. Commits still
+   * work, so the run populates the cache for next time.
+   */
+  ignoreCache?: boolean;
   /** Message for the FetchError thrown when urlAllowed returns false. */
   urlBlockedMessage?: (url: string) => string;
 }
@@ -143,8 +157,12 @@ export class PoliteFetcher {
     this.sleepImpl = opts.sleepImpl ?? sleep;
     this.urlAllowed = opts.urlAllowed ?? null;
     this.urlBlockedMessage = opts.urlBlockedMessage ?? null;
-    this.cachePath = this.snapshotDir ? join(this.snapshotDir, ".fetch-cache.json") : null;
-    if (this.cachePath) this.cache = this.loadCache();
+    const scopeHash = createHash("sha1")
+      .update(opts.cacheScope ?? "default", "utf8")
+      .digest("hex")
+      .slice(0, 12);
+    this.cachePath = this.snapshotDir ? join(this.snapshotDir, `.fetch-cache-${scopeHash}.json`) : null;
+    if (this.cachePath && !opts.ignoreCache) this.cache = this.loadCache();
   }
 
   private loadCache(): Record<string, CacheEntry> {

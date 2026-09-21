@@ -8,6 +8,7 @@
 // the rest of the crawl.
 
 import { closeDb } from "nycfoodie-db";
+import { resolve } from "node:path";
 import { ensureCity } from "../store.js";
 import { discoverMaps } from "./maps.js";
 import { EaterParseError, parseMapPage } from "./parse.js";
@@ -22,6 +23,7 @@ import {
 } from "./robots.js";
 import {
   crawlEaterMap,
+  hasEaterCrawlState,
   initEaterStore,
   recordEaterCrawlState,
   VenueLinker,
@@ -78,12 +80,42 @@ export async function crawlEaterMaps(opts: CrawlEaterMapsOptions = {}): Promise<
   const write = opts.write ?? false;
   const stats = emptyStats();
 
+  // --base-url is operator input: refuse anything fetch() cannot safely
+  // handle before it touches the network (or robots.txt handling).
+  let protocol: string;
+  try {
+    protocol = new URL(baseUrl).protocol;
+  } catch {
+    throw new Error(`invalid --base-url: ${opts.baseUrl}`);
+  }
+  if (protocol !== "http:" && protocol !== "https:") {
+    throw new Error(`--base-url must be http(s), got: ${baseUrl}`);
+  }
+
   const { crawlDelayMs, groups } = await assertMapsCrawlable(baseUrl, userAgent);
+
+  let linker: VenueLinker | null = null;
+  let ignoreCache = false;
+  if (write) {
+    if (!opts.dbPath) throw new Error("--db is required with --write");
+    initEaterStore(opts.dbPath);
+    ensureCity(city, city === "new-york" ? "New York" : city);
+    linker = new VenueLinker(city);
+    // The fetch cache belongs to the database that produced it. On a fresh
+    // DB (no prior Eater crawl state) it is ignored outright, so "not
+    // modified" can never skip ingestion that never happened.
+    ignoreCache = !hasEaterCrawlState(city);
+  }
+
   const fetcher = new PoliteFetcher({
     userAgent,
     // Honour a robots crawl-delay on top of our own 1 req/s floor.
     minIntervalMs: Math.max(EATER_MIN_INTERVAL_MS, crawlDelayMs ?? 0),
     snapshotDir: opts.snapshotDir ?? null,
+    // Scope the cache file to the database path: two databases sharing one
+    // snapshot directory must never share change-detection state.
+    cacheScope: resolve(opts.dbPath ?? "./nycfoodie.db"),
+    ignoreCache,
     // Per-request robots enforcement: the initial /maps/ probe is not enough —
     // a rule could disallow a specific map path the index links to.
     urlAllowed: (url) => robotsAllows(groups, userAgent, url),
@@ -98,14 +130,6 @@ export async function crawlEaterMaps(opts: CrawlEaterMapsOptions = {}): Promise<
   }
   stats.mapsDiscovered = mapUrls.length;
   if (opts.maxMaps !== undefined) mapUrls = mapUrls.slice(0, Math.max(0, opts.maxMaps));
-
-  let linker: VenueLinker | null = null;
-  if (write) {
-    if (!opts.dbPath) throw new Error("--db is required with --write");
-    initEaterStore(opts.dbPath);
-    ensureCity(city, city === "new-york" ? "New York" : city);
-    linker = new VenueLinker(city);
-  }
 
   try {
     for (const url of mapUrls) {

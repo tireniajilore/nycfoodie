@@ -140,8 +140,14 @@ function slugFromUrl(url: string): string {
 }
 
 /**
- * Parse a fetched Eater map page into structured entries. Positions are
- * 1-based in document order. Throws EaterParseError on structural mismatch.
+ * Parse a fetched Eater map page into structured entries. Throws
+ * EaterParseError on structural mismatch.
+ *
+ * Position contract: `position` is the venue's 1-based rank among NAMED
+ * entries, matching the numbered rank displayed on the page. Points without
+ * a usable name (chrome, sponsored slots, parse debris) are not ranked and
+ * do not consume a position — so inserting or removing a nameless point
+ * never renumbers the venues around it.
  */
 export function parseMapPage(html: string, url: string): EaterMapPage {
   const node = mapNode(nextData(html, url), url);

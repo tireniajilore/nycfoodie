@@ -476,8 +476,23 @@ export function crawlEaterMap(
 export { VenueLinker };
 
 /** Record a crawl watermark for (eater, city, collection). */
-export function recordEaterCrawlState(
-  citySlug: string,
+/**
+ * True when this database has completed at least one Eater maps crawl for
+ * the city. The crawler uses it to decide whether the fetch cache can be
+ * trusted: on a fresh DB (no crawl state) the cache is ignored, so "not
+ * modified" can never skip ingestion that never happened.
+ */
+export function hasEaterCrawlState(citySlug: string): boolean {
+  const row = getDb()
+    .prepare(
+      `SELECT 1 AS one FROM crawl_state
+       WHERE source_slug = ? AND city_slug = ? AND collection = 'maps'`
+    )
+    .get(EATER_SOURCE_SLUG, citySlug) as { one: number } | undefined;
+  return !!row;
+}
+
+export function recordEaterCrawlState(  citySlug: string,
   collection: string,
   itemCount: number,
   lastCursor: string | null

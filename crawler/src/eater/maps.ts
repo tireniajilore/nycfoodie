@@ -39,16 +39,24 @@ export function parseMapIndex(html: string, pageUrl: string): MapIndex {
   while ((m = hrefRe.exec(html)) !== null) {
     const abs = absolutize(pageUrl, m[1]);
     if (!abs) continue;
+    let canonical: string;
     let path: string;
     try {
-      path = new URL(abs).pathname;
+      const u = new URL(abs);
+      path = u.pathname;
+      // Canonicalise: tracking queries and fragments do not identify a
+      // distinct map. Without this, /maps/x?utm=1 and /maps/x are crawled
+      // (and cached) as two maps and fight over the same listings.
+      u.search = "";
+      u.hash = "";
+      canonical = u.href;
     } catch {
       continue;
     }
     // /maps/<slug> only — not /maps itself, not /maps?page=N, not subpaths.
-    if (/^\/maps\/[a-z0-9][a-z0-9_-]*$/i.test(path) && !seen.has(abs)) {
-      seen.add(abs);
-      mapUrls.push(abs);
+    if (/^\/maps\/[a-z0-9][a-z0-9_-]*$/i.test(path) && !seen.has(canonical)) {
+      seen.add(canonical);
+      mapUrls.push(canonical);
     }
   }
   let nextPageUrl: string | null = null;

@@ -118,6 +118,26 @@ test("nameless points are skipped and positions compress", () => {
   );
 });
 
+test("a nameless point at the top does not renumber the venues below it", () => {
+  // Positions are ranks among named entries, not raw mapPoints indices: a
+  // chrome/sponsored slot appearing or disappearing never shifts venues.
+  const page = parseMapPage(
+    htmlWithPoints([
+      { description: [{ plaintext: "chrome, no name" }] },
+      point({ name: "First" }),
+      point({ name: "Second" }),
+    ]),
+    URL
+  );
+  assert.deepEqual(
+    page.entries.map((e) => [e.position, e.name]),
+    [
+      [1, "First"],
+      [2, "Second"],
+    ]
+  );
+});
+
 test("missing __NEXT_DATA__ throws EaterParseError", () => {
   assert.throws(() => parseMapPage("<html><body>redesigned</body></html>", URL), (e) => {
     assert.ok(e instanceof EaterParseError);
