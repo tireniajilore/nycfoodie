@@ -44,6 +44,8 @@ export function parseAddress(raw: string | null | undefined): EaterAddress {
   if (parts.length === 1) return { ...EMPTY, address_line1: parts[0] };
 
   // Strip a trailing country token; the dataset is US-only and stores none.
+  // Canada is included defensively: Eater's NYC data occasionally carries a
+  // stray country token, and dropping it beats storing it as an address part.
   const tail = parts[parts.length - 1];
   const body =
     /^(USA|U\.S\.A\.?|United States|US|Canada)$/i.test(tail) ? parts.slice(0, -1) : parts;

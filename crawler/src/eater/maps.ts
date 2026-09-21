@@ -34,10 +34,12 @@ function absolutize(base: string, href: string): string | null {
 export function parseMapIndex(html: string, pageUrl: string): MapIndex {
   const mapUrls: string[] = [];
   const seen = new Set<string>();
-  const hrefRe = /<a\b[^>]*\bhref="([^"]+)"[^>]*>/gi;
+  // Tolerate single or double quotes and arbitrary attribute order — Eater
+  // markup changes must not silently shrink discovery.
+  const hrefRe = /<a\b[^>]*\bhref\s*=\s*("[^"]*"|'[^']*')[^>]*>/gi;
   let m: RegExpExecArray | null;
   while ((m = hrefRe.exec(html)) !== null) {
-    const abs = absolutize(pageUrl, m[1]);
+    const abs = absolutize(pageUrl, stripQuotes(m[1]));
     if (!abs) continue;
     let canonical: string;
     let path: string;
@@ -60,11 +62,30 @@ export function parseMapIndex(html: string, pageUrl: string): MapIndex {
     }
   }
   let nextPageUrl: string | null = null;
-  const linkRe = /<link\b[^>]*\brel="next"[^>]*\bhref="([^"]+)"[^>]*>/i;
-  const linkRe2 = /<link\b[^>]*\bhref="([^"]+)"[^>]*\brel="next"[^>]*>/i;
-  const next = linkRe.exec(html) ?? linkRe2.exec(html);
-  if (next) nextPageUrl = absolutize(pageUrl, next[1]);
+  // rel may carry multiple tokens ("next nofollow") and attributes may come
+  // in any order; scan link tags and inspect rel/href per tag.
+  const linkTagRe = /<link\b[^>]*>/gi;
+  let lm: RegExpExecArray | null;
+  while ((lm = linkTagRe.exec(html)) !== null) {
+    const tag = lm[0];
+    const rel = /\brel\s*=\s*("[^"]*"|'[^']*')/i.exec(tag);
+    if (!rel) continue;
+    const tokens = stripQuotes(rel[1]).toLowerCase().split(/\s+/);
+    if (!tokens.includes("next")) continue;
+    const href = /\bhref\s*=\s*("[^"]*"|'[^']*')/i.exec(tag);
+    if (!href) continue;
+    nextPageUrl = absolutize(pageUrl, stripQuotes(href[1]));
+    break;
+  }
   return { mapUrls, nextPageUrl };
+}
+
+/** Strip one layer of surrounding single or double quotes. */
+function stripQuotes(s: string): string {
+  if (s.length >= 2 && (s[0] === '"' || s[0] === "'") && s[s.length - 1] === s[0]) {
+    return s.slice(1, -1);
+  }
+  return s;
 }
 
 /**

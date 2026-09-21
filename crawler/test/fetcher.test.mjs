@@ -26,6 +26,72 @@ test("/search is refused without any network traffic", async () => {
   assert.equal(calls, 0);
 });
 
+test("forbidden-path guard matches percent-encoded equivalents", async () => {
+  let calls = 0;
+  const f = new PoliteFetcher({
+    fetchImpl: async () => {
+      calls++;
+      return okResponse("x");
+    },
+  });
+  // %61 = 'a': many servers route /se%61rch identically to /search.
+  await assert.rejects(() => f.fetch("https://ny.eater.com/se%61rch?q=sushi", "x"), /forbidden path/);
+  await assert.rejects(() => f.fetch("https://ny.eater.com/%53earch/advanced", "x"), /forbidden path/);
+  assert.equal(calls, 0);
+});
+
+test("redirect to a percent-encoded forbidden path is refused before following", async () => {
+  const requested = [];
+  const f = new PoliteFetcher({
+    fetchImpl: async (url) => {
+      requested.push(url);
+      return redirectResponse("https://ny.eater.com/se%61rch?q=sushi");
+    },
+  });
+  // Decoded, the target is /search: outside the maps area, so the area check
+  // fires on the decoded path and the target is never requested.
+  await assert.rejects(f.fetch(`${BASE}/maps/some-map`, "some-map"), /redirect leaves the maps area/);
+  assert.deepEqual(requested, [`${BASE}/maps/some-map`]);
+});
+
+test("redirect to a percent-encoded maps path is still followed", async () => {
+  const requested = [];
+  const f = new PoliteFetcher({
+    fetchImpl: async (url) => {
+      requested.push(url);
+      if (url === `${BASE}/maps/some-map`) return redirectResponse(`${BASE}/%6Daps/target`);
+      return okResponse("<html>map</html>");
+    },
+  });
+  const res = await f.fetch(`${BASE}/maps/some-map`, "some-map");
+  assert.equal(res.status, 200);
+  assert.deepEqual(requested, [`${BASE}/maps/some-map`, `${BASE}/%6Daps/target`]);
+});
+
+test("a response that stalls after headers still trips the timeout", async () => {
+  const { createServer } = await import("node:http");
+  const server = createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "text/html" });
+    res.write("<html><head><title>stall");
+    // Never end the response: headers resolve, the body never completes.
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const port = server.address().port;
+  const f = new PoliteFetcher({
+    userAgent: UA,
+    minIntervalMs: 0,
+    timeoutMs: 300,
+    maxRetries: 1,
+    snapshotDir: null,
+    sleepImpl: () => Promise.resolve(),
+  });
+  try {
+    await assert.rejects(() => f.fetch(`http://127.0.0.1:${port}/maps/a`, "a"), /body read failed/);
+  } finally {
+    server.close();
+  }
+});
+
 test("the contact user agent is sent on every request", async () => {
   const seen = [];
   const f = new PoliteFetcher({

@@ -23,6 +23,19 @@ test("parseMapIndex extracts map links, dedupes, ignores non-map links", () => {
   assert.equal(nextPageUrl, "https://ny.eater.com/maps?page=2");
 });
 
+test("parseMapIndex tolerates single quotes and multi-token rel", () => {
+  const html = `
+    <a href='/maps/single'>Single</a>
+    <a class="x" href = "/maps/ordered" id="y">Ordered</a>
+    <link rel='next nofollow' href="/maps?page=2">`;
+  const { mapUrls, nextPageUrl } = parseMapIndex(html, PAGE);
+  assert.deepEqual(mapUrls, [
+    "https://ny.eater.com/maps/single",
+    "https://ny.eater.com/maps/ordered",
+  ]);
+  assert.equal(nextPageUrl, "https://ny.eater.com/maps?page=2");
+});
+
 test("parseMapIndex finds rel=next regardless of attribute order", () => {
   const html = `<link href="/maps?page=3" rel="next">`;
   assert.equal(parseMapIndex(html, PAGE).nextPageUrl, "https://ny.eater.com/maps?page=3");
