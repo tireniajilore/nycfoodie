@@ -48,6 +48,14 @@ function seedUsage(db) {
   return { A, B, aDays: new Set(aTimes.map(utcDay)).size };
 }
 
+function killAndWait(child) {
+  child.kill();
+  return new Promise((r) => {
+    if (child.exitCode != null || child.signalCode != null) return r();
+    child.on("exit", r);
+  });
+}
+
 async function withHttpServer(dbPath, fn) {
   for (let attempt = 0; attempt < 5; attempt++) {
     const port = 18000 + Math.floor(Math.random() * 2000);
@@ -66,13 +74,12 @@ async function withHttpServer(dbPath, fn) {
     try {
       await waitForPort(port, child);
       await fn(port);
-      child.kill();
-      await new Promise((r) => child.on("exit", r));
       return;
     } catch (e) {
-      child.kill();
       if (/EADDRINUSE/.test(stderr) && attempt < 4) continue;
       throw e;
+    } finally {
+      await killAndWait(child);
     }
   }
   throw new Error("could not bind a free port");
@@ -149,16 +156,27 @@ test("per_client breakdown in /admin/usage.json", async () => {
       assert.ok(stats.recent.length > 0);
       assert.ok("client_hash" in stats.recent[0]);
 
-      // Window narrowing: days=1 keeps only rows from the last 24h, i.e.
-      // just A's most recent call.
+      // Window narrowing: days=1 keeps only rows from the last 24h.
+      // Expected set: A keeps just its 1h-ago call; B keeps both (2h ago);
+      // the null bucket keeps its 1h-ago call. Tie order between the two
+      // 1-call clients is not deterministic, so assert by client key.
       const res1 = await fetch(`http://127.0.0.1:${port}/admin/usage.json?days=1`, {
         headers: auth,
       });
       const s1 = await res1.json();
-      const a1 = s1.per_client.find((c) => c.client_hash === A);
+      assert.equal(s1.per_client.length, 3);
+      const byHash1 = new Map(s1.per_client.map((c) => [c.client_hash ?? "\0", c]));
+      const a1 = byHash1.get(A);
       assert.equal(a1.total_calls, 1);
       assert.equal(a1.days_active, 1);
       assert.deepEqual(a1.per_tool, [{ tool: "get_restaurant", calls: 1 }]);
+      const b1 = byHash1.get(B);
+      assert.equal(b1.total_calls, 2);
+      assert.equal(b1.days_active, 1);
+      assert.deepEqual(b1.per_tool, [{ tool: "top_rated", calls: 2 }]);
+      const n1 = byHash1.get("\0");
+      assert.equal(n1.total_calls, 1);
+      assert.deepEqual(n1.per_tool, [{ tool: "find_guides", calls: 1 }]);
     });
   } finally {
     rmSync(dir, { recursive: true, force: true });
