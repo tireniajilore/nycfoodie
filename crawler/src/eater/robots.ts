@@ -9,7 +9,7 @@ import { EATER_BASE_URL, EATER_FETCH_TIMEOUT_MS, EATER_USER_AGENT } from "./type
 
 export interface RobotsRule {
   allow: boolean;
-  /** Original pattern text, for debugging. */
+  /** Normalized pattern text (RFC 9309 §2.2.2), for debugging and longest-match comparison. */
   pattern: string;
   test: (path: string) => boolean;
 }
@@ -39,6 +39,52 @@ function patternToTest(pattern: string): (path: string) => boolean {
 function stripComment(line: string): string {
   const i = line.indexOf("#");
   return (i === -1 ? line : line.slice(0, i)).trim();
+}
+
+const UNRESERVED = /[A-Za-z0-9\-_.~]/;
+
+/**
+ * RFC 9309 §2.2.2 path normalization for robots matching.
+ *
+ * A percent-encoded ASCII octet is decoded before comparison when it is
+ * unreserved (`%70` → `p`), so `Disallow: /maps/private` also covers
+ * `/maps/%70rivate`. Encoded reserved characters (`%2F`) and non-ASCII
+ * octets (`%E3%83%84`) stay encoded — decoding them would move component
+ * boundaries the rule author never wrote. Non-ASCII characters in rule
+ * text are percent-encoded (UTF-8, uppercase hex) so both sides compare
+ * in the same space, and hex digits are uppercased so `%2f` and `%2F`
+ * compare equal. Matching stays case-sensitive per RFC.
+ *
+ * Returns null on a malformed `%` sequence; callers fail closed on null.
+ * This gate honors the site's stated policy per the RFC. The fetcher's own
+ * forbidden-path blocklist is a separate, deliberately coarser safety rail
+ * (full decode, case-insensitive) with its own helper — the two are not
+ * required to agree.
+ */
+function normalizeRobotsPath(path: string): string | null {
+  let out = "";
+  let i = 0;
+  while (i < path.length) {
+    const c = path[i];
+    if (c === "%") {
+      const hex = path.slice(i + 1, i + 3);
+      if (!/^[0-9A-Fa-f]{2}$/.test(hex)) return null;
+      const decoded = String.fromCharCode(parseInt(hex, 16));
+      out += UNRESERVED.test(decoded) ? decoded : "%" + hex.toUpperCase();
+      i += 3;
+      continue;
+    }
+    const cp = path.codePointAt(i)!;
+    if (cp > 127) {
+      // Lone surrogates make encodeURIComponent throw; treat as malformed.
+      if (cp >= 0xd800 && cp <= 0xdfff) return null;
+      out += encodeURIComponent(String.fromCodePoint(cp));
+    } else {
+      out += c;
+    }
+    i += cp > 0xffff ? 2 : 1;
+  }
+  return out;
 }
 
 /**
@@ -74,9 +120,17 @@ export function parseRobotsTxt(text: string): RobotsGroup[] {
 
     if (field === "disallow") {
       // Empty Disallow means "allow everything"; record nothing.
-      if (value) current.rules.push({ allow: false, pattern: value, test: patternToTest(value) });
+      // Rule paths are normalized exactly like URL paths (RFC 9309 §2.2.2);
+      // a rule with a malformed `%` sequence falls back to literal matching.
+      if (value) {
+        const pattern = normalizeRobotsPath(value) ?? value;
+        current.rules.push({ allow: false, pattern, test: patternToTest(pattern) });
+      }
     } else if (field === "allow") {
-      if (value) current.rules.push({ allow: true, pattern: value, test: patternToTest(value) });
+      if (value) {
+        const pattern = normalizeRobotsPath(value) ?? value;
+        current.rules.push({ allow: true, pattern, test: patternToTest(pattern) });
+      }
     } else if (field === "crawl-delay") {
       const secs = Number(value);
       if (Number.isFinite(secs) && secs >= 0) {
@@ -122,6 +176,10 @@ export function groupsForAgent(groups: RobotsGroup[], userAgent: string): Robots
 /**
  * RFC 9309 §2.2.2: the longest matching rule wins; on a tie, Allow wins.
  * The tested path is pathname + search (so `/share?*`-style rules work).
+ * Rule paths and the URL pathname are both normalized per RFC 9309 §2.2.2
+ * (unreserved percent-encodings decoded, reserved/non-ASCII kept encoded,
+ * case-sensitive), so `Disallow: /maps/private` covers `/maps/%70rivate`
+ * but not `/maps/%2Fprivate` or `/maps/Private`.
  */
 export function robotsAllows(groups: RobotsGroup[], userAgent: string, url: string): boolean {
   const applicable = groupsForAgent(groups, userAgent);
@@ -129,7 +187,9 @@ export function robotsAllows(groups: RobotsGroup[], userAgent: string, url: stri
   let path: string;
   try {
     const u = new URL(url);
-    path = u.pathname + u.search;
+    const normalized = normalizeRobotsPath(u.pathname);
+    if (normalized === null) return false; // malformed percent-encoding: fail closed
+    path = normalized + u.search;
   } catch {
     return false; // unparseable URL: fail closed
   }

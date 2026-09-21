@@ -317,95 +317,98 @@ export class PoliteFetcher {
       // resolves headers then stalls forever on res.text() still trips it.
       const timer = setTimeout(() => ctrl.abort(), this.timeoutMs);
       try {
-          const headers: Record<string, string> = { "User-Agent": this.userAgent };
-          if (cached?.etag) headers["If-None-Match"] = cached.etag;
-          if (cached?.lastModified) headers["If-Modified-Since"] = cached.lastModified;
-          // Manual redirect handling: validate the Location target before any
-          // request goes to it, so an off-origin or forbidden redirect never
-          // receives even one request from us.
-          let res: Response;
-          try {
-            res = await this.fetchImpl(currentUrl, { headers, redirect: "manual", signal: ctrl.signal });
-          } catch (e) {
-            throw new FetchError(url, null, `network error: ${(e as Error).message}`, true);
-          }
-
-        if (this.isRedirect(res.status)) {
-          await res.arrayBuffer().catch(() => undefined); // drain before the next hop
-          redirects++;
-          if (redirects > EATER_MAX_REDIRECTS) {
-            throw new FetchError(url, res.status, `too many redirects (>${EATER_MAX_REDIRECTS}) starting at ${url}`);
-          }
-          const location = res.headers.get("location");
-          if (!location) {
-            throw new FetchError(url, res.status, `redirect without a Location header`);
-          }
-          let target: URL;
-          try {
-            target = new URL(location, currentUrl);
-          } catch {
-            throw new FetchError(url, res.status, `redirect to unparseable Location: ${location}`);
-          }
-          this.assertRedirectAllowed(url, origin, target, res.status);
-          currentUrl = target.href;
-          continue;
-        }
-        if (res.status === 304) {
-          return { url, status: "not-modified", body: null, unchanged: true, snapshotPath: null, cacheState: null };
-        }
-        if (res.status === 404) {
-          return { url, status: 404, body: null, unchanged: false, snapshotPath: null, cacheState: null };
-        }
-        if (res.status === 429) {
-          if (attempt > this.maxRetries) {
-            throw new FetchError(url, 429, `rate limited after ${attempt} attempts`);
-          }
-          const waitMs = retryAfterMs(res.headers.get("retry-after")) ?? this.backoffMs(attempt);
-          await res.arrayBuffer().catch(() => undefined); // drain
-          await this.sleepImpl(waitMs);
-          continue;
-        }
-        if (res.status >= 500) {
-          await res.arrayBuffer().catch(() => undefined); // drain
-          if (attempt > this.maxRetries) {
-            throw new FetchError(url, res.status, `server error after ${attempt} attempts`);
-          }
-          await this.sleepImpl(this.backoffMs(attempt));
-          continue;
-        }
-        if (!res.ok) {
-          throw new FetchError(url, res.status, `unexpected HTTP ${res.status}`);
-        }
-
-        let body: string;
+        const headers: Record<string, string> = { "User-Agent": this.userAgent };
+        if (cached?.etag) headers["If-None-Match"] = cached.etag;
+        if (cached?.lastModified) headers["If-Modified-Since"] = cached.lastModified;
+        // Manual redirect handling: validate the Location target before any
+        // request goes to it, so an off-origin or forbidden redirect never
+        // receives even one request from us.
+        let res: Response;
         try {
-          body = await res.text();
+          res = await this.fetchImpl(currentUrl, { headers, redirect: "manual", signal: ctrl.signal });
         } catch (e) {
-          // Headers resolved but the body stalled or broke mid-read: same
-          // handling as a network error, and still inside the abort timer.
-          throw new FetchError(url, res.status, `body read failed: ${(e as Error).message}`, true);
+          throw new FetchError(url, null, `network error: ${(e as Error).message}`, true);
         }
-        const hash = sha256Hex(body);
-        if (cached?.sha256 === hash) {
-          return { url, status: 200, body, unchanged: true, snapshotPath: null, cacheState: null };
-        }
-        // Snapshot first, cache second: a failed snapshot must not poison the
-        // cache into believing this content was already preserved. When a
-        // snapshotDir is configured, snapshots are a hard requirement — a
-        // write failure throws and the map is counted as failed, never
-        // silently snapshotless. The cache entry itself is only returned, not
-        // written: the caller commits it after parse + store succeed.
-        let snapshotPath: string | null = null;
-        if (this.snapshotDir && snapshotName) {
-          snapshotPath = this.writeSnapshot(snapshotName, body);
-        }
-        const cacheState: CacheEntry = {
-          etag: res.headers.get("etag"),
-          lastModified: res.headers.get("last-modified"),
-          sha256: hash,
-        };
 
-        return { url, status: 200, body, unchanged: false, snapshotPath, cacheState };
+      if (this.isRedirect(res.status)) {
+        await res.arrayBuffer().catch(() => undefined); // drain before the next hop
+        redirects++;
+        if (redirects > EATER_MAX_REDIRECTS) {
+          throw new FetchError(url, res.status, `too many redirects (>${EATER_MAX_REDIRECTS}) starting at ${url}`);
+        }
+        const location = res.headers.get("location");
+        if (!location) {
+          throw new FetchError(url, res.status, `redirect without a Location header`);
+        }
+        let target: URL;
+        try {
+          target = new URL(location, currentUrl);
+        } catch {
+          throw new FetchError(url, res.status, `redirect to unparseable Location: ${location}`);
+        }
+        this.assertRedirectAllowed(url, origin, target, res.status);
+        currentUrl = target.href;
+        continue;
+      }
+      if (res.status === 304) {
+        return { url, status: "not-modified", body: null, unchanged: true, snapshotPath: null, cacheState: null };
+      }
+      if (res.status === 404) {
+        return { url, status: 404, body: null, unchanged: false, snapshotPath: null, cacheState: null };
+      }
+      if (res.status === 429) {
+        if (attempt > this.maxRetries) {
+          throw new FetchError(url, 429, `rate limited after ${attempt} attempts`);
+        }
+        const waitMs = retryAfterMs(res.headers.get("retry-after")) ?? this.backoffMs(attempt);
+        await res.arrayBuffer().catch(() => undefined); // drain
+        await this.sleepImpl(waitMs);
+        continue;
+      }
+      if (res.status >= 500) {
+        await res.arrayBuffer().catch(() => undefined); // drain
+        if (attempt > this.maxRetries) {
+          throw new FetchError(url, res.status, `server error after ${attempt} attempts`);
+        }
+        // Honour Retry-After on 503 the same way the 429 branch does: a
+        // server that asks us to wait 120s must not be retried in ~2s.
+        const waitMs = retryAfterMs(res.headers.get("retry-after")) ?? this.backoffMs(attempt);
+        await this.sleepImpl(waitMs);
+        continue;
+      }
+      if (!res.ok) {
+        throw new FetchError(url, res.status, `unexpected HTTP ${res.status}`);
+      }
+
+      let body: string;
+      try {
+        body = await res.text();
+      } catch (e) {
+        // Headers resolved but the body stalled or broke mid-read: same
+        // handling as a network error, and still inside the abort timer.
+        throw new FetchError(url, res.status, `body read failed: ${(e as Error).message}`, true);
+      }
+      const hash = sha256Hex(body);
+      if (cached?.sha256 === hash) {
+        return { url, status: 200, body, unchanged: true, snapshotPath: null, cacheState: null };
+      }
+      // Snapshot first, cache second: a failed snapshot must not poison the
+      // cache into believing this content was already preserved. When a
+      // snapshotDir is configured, snapshots are a hard requirement — a
+      // write failure throws and the map is counted as failed, never
+      // silently snapshotless. The cache entry itself is only returned, not
+      // written: the caller commits it after parse + store succeed.
+      let snapshotPath: string | null = null;
+      if (this.snapshotDir && snapshotName) {
+        snapshotPath = this.writeSnapshot(snapshotName, body);
+      }
+      const cacheState: CacheEntry = {
+        etag: res.headers.get("etag"),
+        lastModified: res.headers.get("last-modified"),
+        sha256: hash,
+      };
+
+      return { url, status: 200, body, unchanged: false, snapshotPath, cacheState };
       } catch (e) {
         // Transient failures (network errors, body stalls) are retried with
         // backoff; intentional refusals (redirect policy, unexpected status,

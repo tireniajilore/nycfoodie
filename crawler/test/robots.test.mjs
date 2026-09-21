@@ -108,6 +108,52 @@ test("no matching group allows everything", () => {
   assert.equal(robotsAllows(parseRobotsTxt("User-agent: SomeBot\nDisallow: /\n"), UA, `${BASE}/maps/x`), true);
 });
 
+test("robots rule matching decodes unreserved percent-encodings (RFC 9309)", () => {
+  const groups = parseRobotsTxt("User-agent: *\nDisallow: /maps/private\nAllow: /maps/\n");
+  // %70 = 'p' (unreserved): the encoded equivalent of a disallowed path is denied.
+  assert.equal(robotsAllows(groups, UA, `${BASE}/maps/private`), false);
+  assert.equal(robotsAllows(groups, UA, `${BASE}/maps/%70rivate`), false);
+  assert.equal(robotsAllows(groups, UA, `${BASE}/maps/%70%72ivate/sub`), false);
+  // And an encoded allowed path stays allowed.
+  assert.equal(robotsAllows(groups, UA, `${BASE}/maps/%70ublic`), true);
+  assert.equal(robotsAllows(groups, UA, `${BASE}/maps/public`), true);
+});
+
+test("robots matching keeps reserved encodings encoded (RFC 9309)", () => {
+  const groups = parseRobotsTxt("User-agent: *\nDisallow: /maps/private\nAllow: /maps/\n");
+  // %2F is reserved: it must NOT decode to '/', so this is a different path
+  // that the Disallow rule does not cover.
+  assert.equal(robotsAllows(groups, UA, `${BASE}/maps/%2Fprivate`), true);
+  assert.equal(robotsAllows(groups, UA, `${BASE}/maps/%2fprivate`), true); // hex case is folded
+});
+
+test("robots matching is case-sensitive (RFC 9309)", () => {
+  const groups = parseRobotsTxt("User-agent: *\nDisallow: /maps/private\nAllow: /maps/\n");
+  // %50 = 'P': decoding applies, but 'P' is not 'p' under case-sensitive matching.
+  assert.equal(robotsAllows(groups, UA, `${BASE}/maps/%50rivate`), true);
+  assert.equal(robotsAllows(groups, UA, `${BASE}/maps/Private`), true);
+});
+
+test("encoded rule paths are normalized the same way as URLs", () => {
+  const groups = parseRobotsTxt("User-agent: *\nDisallow: /maps/%70rivate\nAllow: /maps/\n");
+  assert.equal(robotsAllows(groups, UA, `${BASE}/maps/private`), false);
+  assert.equal(robotsAllows(groups, UA, `${BASE}/maps/%70rivate`), false);
+  assert.equal(robotsAllows(groups, UA, `${BASE}/maps/public`), true);
+});
+
+test("non-ASCII rule text and URLs compare in percent-encoded space", () => {
+  const groups = parseRobotsTxt("User-agent: *\nDisallow: /caf\u00e9\nAllow: /\n");
+  assert.equal(robotsAllows(groups, UA, `${BASE}/caf%C3%A9`), false);
+  assert.equal(robotsAllows(groups, UA, `${BASE}/caf%C3%a9`), false); // hex case is folded
+  assert.equal(robotsAllows(groups, UA, `${BASE}/other`), true);
+});
+
+test("malformed percent-encoding fails closed", () => {
+  const groups = parseRobotsTxt("User-agent: *\nDisallow: /x\n");
+  assert.equal(robotsAllows(groups, UA, `${BASE}/maps/%zz`), false);
+  assert.equal(robotsAllows(groups, UA, `${BASE}/maps/%2`), false);
+});
+
 test("unparseable URL fails closed", () => {
   const groups = parseRobotsTxt("User-agent: *\nDisallow: /x\n");
   assert.equal(robotsAllows(groups, UA, ":::not a url:::"), false);

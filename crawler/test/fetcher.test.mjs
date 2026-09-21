@@ -197,6 +197,26 @@ test("persistent 503 exhausts retries and throws FetchError", async () => {
   });
 });
 
+test("503 with Retry-After waits the requested time, like 429", async () => {
+  const sleeps = [];
+  let n = 0;
+  const f = new PoliteFetcher({
+    minIntervalMs: 0,
+    maxRetries: 3,
+    sleepImpl: async (ms) => {
+      sleeps.push(ms);
+    },
+    fetchImpl: async () => {
+      n++;
+      if (n < 3) return new Response("down", { status: 503, headers: { "retry-after": "2" } });
+      return okResponse("ok");
+    },
+  });
+  const res = await f.fetch("https://ny.eater.com/maps/a");
+  assert.equal(res.status, 200);
+  assert.ok(sleeps.some((ms) => ms >= 2000), `sleeps=${sleeps}`);
+});
+
 test("404 returns a gone result, not an exception", async () => {
   const f = new PoliteFetcher({
     fetchImpl: async () => new Response("nope", { status: 404 }),
