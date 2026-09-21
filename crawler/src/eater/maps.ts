@@ -99,7 +99,7 @@ export async function discoverMaps(
         found.push(u);
       }
     }
-    pageUrl = nextPageUrl && isSameOrigin(nextPageUrl, origin) ? nextPageUrl : null;
+    pageUrl = nextPageUrl && isIndexPage(nextPageUrl, origin) ? nextPageUrl : null;
   }
   return found;
 }
@@ -110,4 +110,21 @@ function isSameOrigin(url: string, origin: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * True for the /maps index pagination shape only. Discovery must never
+ * become a site spider: a changed or hostile index page cannot redirect the
+ * crawl onto arbitrary same-origin pages via rel="next".
+ */
+function isIndexPage(url: string, origin: string): boolean {
+  if (!isSameOrigin(url, origin)) return false;
+  let u: URL;
+  try {
+    u = new URL(url);
+  } catch {
+    return false;
+  }
+  if (u.pathname !== "/maps") return false;
+  return [...u.searchParams.keys()].every((k) => k === "page");
 }

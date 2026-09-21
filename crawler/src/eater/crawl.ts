@@ -63,12 +63,17 @@ export async function assertMapsCrawlable(
 ): Promise<{ crawlDelayMs: number | null; groups: RobotsGroup[] }> {
   const text = await fetchRobots();
   const groups = parseRobotsTxt(text);
-  const probe = `${baseUrl.replace(/\/+$/, "")}/maps/probe`;
-  if (!robotsAllows(groups, userAgent, probe)) {
-    const applicable = groupsForAgent(groups, userAgent).map((g) => g.agents.join(",")).join(" | ");
-    throw new Error(
-      `robots.txt disallows ${probe} for this user agent (matched groups: ${applicable || "none"}). Aborting.`
-    );
+  const root = baseUrl.replace(/\/+$/, "");
+  // Probe both the real discovery start URL and a representative map URL: a
+  // rule like `Disallow: /maps$` blocks the index without blocking map
+  // pages, and must fail here with the clear message, not mid-discovery.
+  for (const probe of [`${root}/maps`, `${root}/maps/probe`]) {
+    if (!robotsAllows(groups, userAgent, probe)) {
+      const applicable = groupsForAgent(groups, userAgent).map((g) => g.agents.join(",")).join(" | ");
+      throw new Error(
+        `robots.txt disallows ${probe} for this user agent (matched groups: ${applicable || "none"}). Aborting.`
+      );
+    }
   }
   return { crawlDelayMs: robotsCrawlDelayMs(groups, userAgent), groups };
 }
@@ -136,7 +141,11 @@ export async function crawlEaterMaps(opts: CrawlEaterMapsOptions = {}): Promise<
       const slug = mapSlugFromUrl(url);
       let result: FetchResult;
       try {
-        result = await fetcher.fetch(url, slug);
+        result = await fetcher.fetch(url, slug, {
+          // Dry runs validate fetching + parsing: never 304-skip, so parser
+          // changes can be checked against currently unchanged pages.
+          conditional: write,
+        });
       } catch (e) {
         const reason = e instanceof FetchError ? `${e.message}` : (e as Error).message;
         console.log(`  ✗ ${slug}: fetch failed: ${reason}`);

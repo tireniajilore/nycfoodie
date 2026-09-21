@@ -133,3 +133,37 @@ test("discoverMaps ignores off-origin map links and next pages", async () => {
   assert.deepEqual(found, ["https://ny.eater.com/maps/ok"]);
   assert.deepEqual(fetched, ["https://ny.eater.com/maps"]); // evil next page not followed
 });
+
+test("discoverMaps refuses same-origin rel=next links outside the /maps index", async () => {
+  // Discovery must never become a site spider: a hostile or redesigned index
+  // page cannot steer pagination onto arbitrary same-origin pages.
+  const fetched = [];
+  const src = {
+    async fetch(url, _label) {
+      fetched.push(url);
+      const next =
+        url === "https://ny.eater.com/maps"
+          ? `<link rel="next" href="/about">`
+          : `<link rel="next" href="/maps?foo=bar">`;
+      return {
+        url,
+        status: 200,
+        body: `<a href="/maps/ok">ok</a>` + next,
+        unchanged: false,
+        snapshotPath: null,
+      };
+    },
+  };
+  const found = await discoverMaps(src, { baseUrl: "https://ny.eater.com" });
+  assert.deepEqual(found, ["https://ny.eater.com/maps/ok"]);
+  assert.deepEqual(fetched, ["https://ny.eater.com/maps"]); // /about never fetched
+});
+
+test("discoverMaps still follows genuine /maps?page=N pagination", async () => {
+  const pages = new Map([
+    ["https://ny.eater.com/maps", { mapLinks: ["a"], next: "maps?page=2" }],
+    ["https://ny.eater.com/maps?page=2", { mapLinks: ["b"], next: null }],
+  ]);
+  const found = await discoverMaps(stubSource(pages), { baseUrl: "https://ny.eater.com" });
+  assert.deepEqual(found, ["https://ny.eater.com/maps/a", "https://ny.eater.com/maps/b"]);
+});

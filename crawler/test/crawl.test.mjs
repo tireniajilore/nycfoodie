@@ -333,6 +333,50 @@ test("a 304 on the /maps index does not silently discover zero maps", async () =
   }
 });
 
+test("dry runs ignore the fetch cache: warm cache still fetches and parses", async () => {
+  const { createServer: cs } = await import("node:http");
+  const server = cs((req, res) => {
+    const routes = routesFor(server.address().port);
+    const body = routes[req.url];
+    if (body === undefined) {
+      res.writeHead(404);
+      res.end();
+      return;
+    }
+    if (req.headers["if-none-match"]) {
+      res.writeHead(304);
+      res.end();
+      return;
+    }
+    res.writeHead(200, { "content-type": "text/html", etag: '"v1"' });
+    res.end(body);
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const dir = mkdtempSync(join(tmpdir(), "eater-crawl-"));
+  const dbPath = join(dir, "test.db");
+  const snapshotDir = join(dir, "snapshots");
+  // Warm the cache for both map pages, as a previous write run would have.
+  mkdirSync(snapshotDir, { recursive: true });
+  const scopeHash = createHash("sha1").update(resolve(dbPath), "utf8").digest("hex").slice(0, 12);
+  const warm = {};
+  for (const slug of ["best-sushi", "best-ramen"]) {
+    warm[`${baseUrl}/maps/${slug}`] = { etag: '"v1"', lastModified: null, sha256: "deadbeef" };
+  }
+  writeFileSync(join(snapshotDir, `.fetch-cache-${scopeHash}.json`), JSON.stringify(warm));
+  try {
+    // A dry run validates fetching + parsing: it must fetch unconditionally
+    // so parser changes can be checked against unchanged pages.
+    const dry = await crawlEaterMaps({ baseUrl, write: false, dbPath, snapshotDir });
+    assert.equal(dry.mapsNotModified, 0);
+    assert.equal(dry.mapsFetched, 2);
+    assert.equal(dry.entries, 3);
+    assert.equal(dry.listingsUpserted, 0);
+  } finally {
+    server.close();
+  }
+});
+
 test("a warm cache with a fresh database at the same path still ingests everything", async () => {
   const { createServer: cs } = await import("node:http");
   const server = cs((req, res) => {
@@ -388,6 +432,20 @@ test("assertMapsCrawlable refuses when robots disallows /maps/", async () => {
     () =>
       assertMapsCrawlable("https://ny.eater.com", "x", async () => "User-agent: *\nDisallow: /maps/\n"),
     /disallows/
+  );
+});
+
+test("assertMapsCrawlable probes the real /maps index URL, not just map pages", async () => {
+  // `Disallow: /maps$` blocks the discovery start page while allowing map
+  // pages. The preflight must fail loudly here, not mid-discovery.
+  await assert.rejects(
+    () =>
+      assertMapsCrawlable(
+        "https://ny.eater.com",
+        "x",
+        async () => "User-agent: *\nDisallow: /maps$\n"
+      ),
+    /disallows https:\/\/ny\.eater\.com\/maps for/
   );
 });
 
