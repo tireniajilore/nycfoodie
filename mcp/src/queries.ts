@@ -760,6 +760,23 @@ export function getRestaurant(
        ORDER BY g.title, ge.position`
     )
     .all(r.id) as Record<string, unknown>[];
+  // Eater editorial blurbs: verbatim excerpts from every Eater guide entry
+  // linked to this venue (any listing/source — cross-source venues benefit
+  // too, since Eater blurbs carry intel Infatuation lacks, e.g. happy-hour
+  // prices). Read-time only, no schema change; captured_at is the guide's
+  // last crawl timestamp. No synthesised "review" — a stitched blurb would
+  // imply a critic verdict that doesn't exist.
+  const editorialBlurbs = db
+    .prepare(
+      `SELECT 'eater' AS source, g.title AS guide_title, g.url AS guide_url,
+        ge.position, ge.blurb, g.last_crawled_at AS captured_at
+       FROM guide_entries ge
+       JOIN guides g ON g.id = ge.guide_id
+       JOIN source_listings sl ON sl.id = ge.source_listing_id
+       WHERE sl.restaurant_id = ? AND g.source_slug = 'eater' AND ge.blurb IS NOT NULL
+       ORDER BY g.title, ge.position`
+    )
+    .all(r.id) as Record<string, unknown>[];
   const review: Record<string, unknown> = {
     title: row.review_title,
     // Honest headline: the source's real headline, or null when it has none
@@ -811,6 +828,7 @@ export function getRestaurant(
     review: row.review_title ? review : null,
     tags: grouped,
     guide_appearances: guides,
+    editorial_blurbs: editorialBlurbs,
   };
 }
 
