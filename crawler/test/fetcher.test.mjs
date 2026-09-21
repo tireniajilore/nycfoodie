@@ -40,6 +40,42 @@ test("forbidden-path guard matches percent-encoded equivalents", async () => {
   assert.equal(calls, 0);
 });
 
+test("forbidden-path guard cannot be bypassed with encoded slashes or dot segments", async () => {
+  let calls = 0;
+  const f = new PoliteFetcher({
+    fetchImpl: async () => {
+      calls++;
+      return okResponse("x");
+    },
+  });
+  // "/%2Fsearch" decodes to "//search": it must still match the /search
+  // guard. A naive re-parse of the decoded string as a URL would treat the
+  // leading "//" as a scheme-relative authority, collapse the path to "/",
+  // and let the request through.
+  await assert.rejects(() => f.fetch("https://ny.eater.com/%2Fsearch", "x"), /forbidden path/);
+  await assert.rejects(() => f.fetch("https://ny.eater.com/%2fsearch", "x"), /forbidden path/);
+  await assert.rejects(() => f.fetch("https://ny.eater.com//search", "x"), /forbidden path/);
+  // Encoded ".." must resolve before the guard runs, so traversal into a
+  // forbidden path cannot dodge it either.
+  await assert.rejects(() => f.fetch("https://ny.eater.com/maps/%2e%2e/search", "x"), /forbidden path/);
+  await assert.rejects(() => f.fetch("https://ny.eater.com/maps/%2E%2E/%53earch", "x"), /forbidden path/);
+  assert.equal(calls, 0);
+});
+
+test("redirect to an encoded-slash forbidden path is refused before following", async () => {
+  const requested = [];
+  const f = new PoliteFetcher({
+    fetchImpl: async (url) => {
+      requested.push(url);
+      return redirectResponse("https://ny.eater.com/%2Fsearch");
+    },
+  });
+  // Decoded, the target is /search: outside the maps area, so the area check
+  // fires on the normalised decoded path and the target is never requested.
+  await assert.rejects(f.fetch(`${BASE}/maps/some-map`, "some-map"), /redirect leaves the maps area/);
+  assert.deepEqual(requested, [`${BASE}/maps/some-map`]);
+});
+
 test("redirect to a percent-encoded forbidden path is refused before following", async () => {
   const requested = [];
   const f = new PoliteFetcher({

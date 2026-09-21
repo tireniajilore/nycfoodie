@@ -117,17 +117,22 @@ export async function crawlEaterMaps(opts: CrawlEaterMapsOptions = {}): Promise<
   if (write) {
     if (!opts.dbPath) throw new Error("--db is required with --write");
     initEaterStore(opts.dbPath);
-    ensureCity(city, city === "new-york" ? "New York" : city);
-    linker = new VenueLinker(city);
-    // The fetch cache belongs to the database that produced it. On a fresh
-    // DB (no prior Eater crawl state) it is ignored outright, so "not
-    // modified" can never skip ingestion that never happened.
-    ignoreCache = !hasEaterCrawlState(city);
   }
 
-  // The try/finally covers everything after DB initialisation: if index
-  // discovery (or anything else) throws, the connection is still closed.
+  // The try/finally covers everything after DB initialisation — the setup
+  // steps below as well as index discovery and the crawl loop. If
+  // ensureCity, the VenueLinker build, the crawl-state check, or anything
+  // else throws, the connection opened above is still closed.
   try {
+    if (write) {
+      ensureCity(city, city === "new-york" ? "New York" : city);
+      linker = new VenueLinker(city);
+      // The fetch cache belongs to the database that produced it. On a fresh
+      // DB (no prior Eater crawl state) it is ignored outright, so "not
+      // modified" can never skip ingestion that never happened.
+      ignoreCache = !hasEaterCrawlState(city);
+    }
+
     const fetcher = new PoliteFetcher({
       userAgent,
       // Honour a robots crawl-delay on top of our own 1 req/s floor.

@@ -135,12 +135,29 @@ function decodedPathname(url: string): string | null {
   } catch {
     return null;
   }
-  if (!raw.includes("%")) return raw.toLowerCase();
-  try {
-    return new URL(decodeURIComponent(raw), "https://placeholder.invalid").pathname.toLowerCase();
-  } catch {
-    return null;
+  let decoded = raw;
+  if (raw.includes("%")) {
+    try {
+      decoded = decodeURIComponent(raw);
+    } catch {
+      return null;
+    }
   }
+  // Normalise as a path string, never by re-parsing it as a URL: a decoded
+  // leading "//" ("/%2Fsearch" decodes to "//search") must not be mistaken
+  // for a scheme-relative authority, which would collapse the path to "/"
+  // and slip past the forbidden-path guard. Dot segments are resolved too,
+  // so "/maps/%2e%2e/search" cannot dodge the guard either.
+  const out: string[] = [];
+  for (const seg of decoded.split("/")) {
+    if (seg === "" || seg === ".") continue;
+    if (seg === "..") {
+      out.pop();
+      continue;
+    }
+    out.push(seg);
+  }
+  return `/${out.join("/")}`.toLowerCase();
 }
 
 function sha256Hex(s: string): string {

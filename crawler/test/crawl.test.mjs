@@ -593,6 +593,41 @@ test("write mode closes the DB when map discovery fails", async () => {
   }
 });
 
+test("write mode closes the DB when setup fails after opening it", async () => {
+  const { createServer: cs } = await import("node:http");
+  const server = cs((req, res) => {
+    if (req.url === "/robots.txt") {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("User-agent: *\nAllow: /maps/\n");
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const dir = mkdtempSync(join(tmpdir(), "eater-crawl-"));
+  const dbPath = join(dir, "test.db");
+  // Build a fully migrated database, then break the cities table. The
+  // migrate() inside initEaterStore sees every version applied and leaves
+  // the broken schema alone, so ensureCity's INSERT throws AFTER the
+  // connection is open — the crawl must still close it.
+  const { migrate } = await import("nycfoodie-db/dist/migrate.js");
+  const { openDb } = await import("nycfoodie-db");
+  migrate(dbPath);
+  openDb(dbPath);
+  getDb().exec("DROP TABLE cities");
+  getDb().exec("CREATE TABLE cities (slug TEXT PRIMARY KEY)");
+  closeDb();
+  try {
+    await assert.rejects(() => crawlEaterMaps({ baseUrl, write: true, dbPath }), /column/);
+    assert.throws(() => getDb(), /Database not open/);
+  } finally {
+    server.close();
+    closeDb();
+  }
+});
+
 test("a fresh-DB write run that stores nothing records no crawl state and drops the stale cache", async () => {
   const { createServer: cs } = await import("node:http");
   const server = cs((req, res) => {
