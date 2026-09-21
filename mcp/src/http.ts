@@ -286,7 +286,17 @@ function handleAdminUsage(req: IncomingMessage, res: ServerResponse, url: URL): 
     .map(
       (r) => `<tr><td>${escHtml(r.ts.replace("T", " ").slice(0, 19))}</td>
         <td>${escHtml(r.tool)}</td><td>${escHtml(r.city ?? "—")}</td>
+        <td><code>${escHtml(r.client_hash ?? "—")}</code></td>
         <td>${r.latency_ms ?? "—"} ms</td><td>${r.ok ? "ok" : "error"}</td></tr>`
+    )
+    .join("");
+  const clientRows = stats.per_client
+    .map(
+      (c) => `<tr><td><code>${escHtml(c.client_hash ?? "—")}</code></td>
+        <td>${c.total_calls}</td><td>${c.days_active}</td>
+        <td>${escHtml(c.first_seen.replace("T", " ").slice(0, 19))}</td>
+        <td>${escHtml(c.last_seen.replace("T", " ").slice(0, 19))}</td>
+        <td>${escHtml(c.per_tool.map((t) => `${t.tool} ×${t.calls}`).join(", ") || "—")}</td></tr>`
     )
     .join("");
   const html = `<!doctype html>
@@ -324,9 +334,12 @@ function handleAdminUsage(req: IncomingMessage, res: ServerResponse, url: URL): 
 ${dayRows || "<p>No usage recorded yet.</p>"}
 <h2>Calls per tool</h2>
 ${toolRows || "<p>No usage recorded yet.</p>"}
+<h2>Calls per client</h2>
+<table><thead><tr><th>Client</th><th>Calls</th><th>Days active</th><th>First seen (UTC)</th><th>Last seen (UTC)</th><th>Tools</th></tr></thead>
+<tbody>${clientRows || '<tr><td colspan="6">No usage recorded yet.</td></tr>'}</tbody></table>
 <h2>Recent calls</h2>
-<table><thead><tr><th>Time (UTC)</th><th>Tool</th><th>City</th><th>Latency</th><th>Status</th></tr></thead>
-<tbody>${recentRows || '<tr><td colspan="5">No usage recorded yet.</td></tr>'}</tbody></table>
+<table><thead><tr><th>Time (UTC)</th><th>Tool</th><th>City</th><th>Client</th><th>Latency</th><th>Status</th></tr></thead>
+<tbody>${recentRows || '<tr><td colspan="6">No usage recorded yet.</td></tr>'}</tbody></table>
 <p class="note">Clients are counted by an anonymised fingerprint (a truncated hash of IP + user agent), so the
 client count is an approximation of people, not an exact headcount — MCP clients don't identify users.
 No query text, IPs or user agents are stored.</p>

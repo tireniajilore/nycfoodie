@@ -14,7 +14,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "start:http": "node dist/http.js",
-    "test": "npm run build && node test/smoke.mjs && node test/eater-enrichment.mjs"
+    "test": "npm run build && node test/smoke.mjs && node test/eater-enrichment.mjs && node test/admin-per-client.mjs"
   },
   "type": "module",
   "version": "0.1.0"
