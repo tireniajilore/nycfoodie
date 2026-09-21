@@ -267,6 +267,40 @@ test("same content hash without 304 is recognised as unchanged", async () => {
   assert.equal(readdirSync(join(dir, "a")).length, 1);
 });
 
+test("unchanged 200 with rotated validators returns an updated cache state", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "eater-fetch-"));
+  const seenIfNoneMatch = [];
+  // Simulates a server that rotates its ETag while serving the same body:
+  // unknown/old validators get a 200 with the new ETag, the current one 304s.
+  const f = new PoliteFetcher({
+    fetchImpl: async (_url, init) => {
+      seenIfNoneMatch.push(init.headers["If-None-Match"] ?? null);
+      if (init.headers["If-None-Match"] === '"v2"') return new Response(null, { status: 304 });
+      const etag = init.headers["If-None-Match"] === '"v1"' ? '"v2"' : '"v1"';
+      return okResponse("<html>same</html>", { etag });
+    },
+  });
+  const first = await f.fetch("https://ny.eater.com/maps/a", "a");
+  assert.equal(first.unchanged, false);
+  assert.equal(first.cacheState.etag, '"v1"');
+  f.commitCache("https://ny.eater.com/maps/a", first);
+
+  const second = await f.fetch("https://ny.eater.com/maps/a", "a");
+  assert.equal(second.status, 200);
+  assert.equal(second.unchanged, true);
+  // Same hash, rotated validators: cache state comes back refreshed, not null.
+  assert.ok(second.cacheState);
+  assert.equal(second.cacheState.etag, '"v2"');
+  assert.equal(second.cacheState.lastModified, null);
+  f.commitCache("https://ny.eater.com/maps/a", second);
+
+  const third = await f.fetch("https://ny.eater.com/maps/a", "a");
+  assert.equal(third.status, "not-modified");
+  // The third request was conditional on the NEW validator: the cache
+  // learned the rotation instead of re-downloading the full page forever.
+  assert.equal(seenIfNoneMatch[2], '"v2"');
+});
+
 test("changed content writes a new snapshot and updates the cache", async () => {
   const dir = mkdtempSync(join(tmpdir(), "eater-fetch-"));
   let body = "<html>v1</html>";

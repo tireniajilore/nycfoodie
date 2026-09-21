@@ -390,7 +390,18 @@ export class PoliteFetcher {
       }
       const hash = sha256Hex(body);
       if (cached?.sha256 === hash) {
-        return { url, status: 200, body, unchanged: true, snapshotPath: null, cacheState: null };
+        // Same body as the cached copy, but the server may have rotated its
+        // validators (ETag/Last-Modified). Return the fresh validators with
+        // the unchanged body instead of a null cache state: committing them
+        // keeps future runs 304-eligible rather than re-downloading the full
+        // page forever. Safe: this body was already ingested on the run that
+        // created the cache entry. No new snapshot — the body is byte-identical.
+        const cacheState: CacheEntry = {
+          etag: res.headers.get("etag"),
+          lastModified: res.headers.get("last-modified"),
+          sha256: hash,
+        };
+        return { url, status: 200, body, unchanged: true, snapshotPath: null, cacheState };
       }
       // Snapshot first, cache second: a failed snapshot must not poison the
       // cache into believing this content was already preserved. When a

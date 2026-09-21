@@ -97,6 +97,19 @@ export async function crawlEaterMaps(opts: CrawlEaterMapsOptions = {}): Promise<
     throw new Error(`--base-url must be http(s), got: ${baseUrl}`);
   }
 
+  // --map is operator input: validate it as a single slug before it is
+  // concatenated into a URL. Plain traversal ("../about") and encoded
+  // traversal ("%2e%2e/about") would otherwise escape /maps/ and let the
+  // crawler fetch arbitrary same-origin pages the redirect guard never sees
+  // (it only protects redirect targets, not the initial request).
+  let mapSlug: string | null = null;
+  if (opts.map !== undefined) {
+    mapSlug = opts.map.replace(/^\/+/, "");
+    if (!/^[a-z0-9][a-z0-9_-]*$/i.test(mapSlug)) {
+      throw new Error(`--map must be a single map slug (letters, digits, "-" and "_"), got: ${opts.map}`);
+    }
+  }
+
   const { crawlDelayMs, groups } = await assertMapsCrawlable(baseUrl, userAgent);
 
   let linker: VenueLinker | null = null;
@@ -128,8 +141,8 @@ export async function crawlEaterMaps(opts: CrawlEaterMapsOptions = {}): Promise<
   });
 
   let mapUrls: string[];
-  if (opts.map) {
-    mapUrls = [`${baseUrl}/maps/${opts.map.replace(/^\/+/, "")}`];
+  if (mapSlug !== null) {
+    mapUrls = [`${baseUrl}/maps/${mapSlug}`];
   } else {
     mapUrls = await discoverMaps(fetcher, { baseUrl });
   }
@@ -158,6 +171,14 @@ export async function crawlEaterMaps(opts: CrawlEaterMapsOptions = {}): Promise<
         continue;
       }
       if (result.status === "not-modified" || result.unchanged || result.body === null) {
+        // Hash-unchanged 200s carry a refreshed cache state (new
+        // ETag/Last-Modified, same body): commit it in write mode so the
+        // cache learns the rotated validators and stays 304-eligible. Safe
+        // because this body was already parsed and stored on the run that
+        // created the cache entry. Dry runs never commit cache state, and
+        // commitCache is a no-op for 304s (no cacheState), so both skip
+        // kinds flow through this safely.
+        if (write) fetcher.commitCache(url, result);
         console.log(`  = ${slug}: not modified, skipping`);
         stats.mapsNotModified++;
         continue;

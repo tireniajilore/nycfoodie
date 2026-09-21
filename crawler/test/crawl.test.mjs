@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { closeDb } from "nycfoodie-db";
@@ -456,4 +456,112 @@ test("assertMapsCrawlable passes when /maps/ is allowed", async () => {
     async () => "User-agent: *\nAllow: /maps/\nCrawl-delay: 5\n"
   );
   assert.equal(r.crawlDelayMs, 5000);
+});
+
+test("--map rejects path traversal before any network request", async () => {
+  const { createServer: cs } = await import("node:http");
+  let requests = 0;
+  const server = cs((_req, res) => {
+    requests++;
+    res.writeHead(404);
+    res.end();
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    // Plain traversal, backslash traversal, encoded traversal, query
+    // strings, multi-segment paths, empties, and spaces all fail closed.
+    for (const bad of [
+      "../about",
+      "..\\about",
+      "%2e%2e/about",
+      "%2E%2E/about",
+      "maps?page=2",
+      "/maps/map-a/",
+      "map-a/map-b",
+      "",
+      "map a",
+      "..",
+    ]) {
+      await assert.rejects(() => crawlEaterMaps({ baseUrl, write: false, map: bad }), /--map must be a single map slug/);
+    }
+    // Slug validation runs before robots preflight: not even /robots.txt
+    // was requested for any of the rejected values.
+    assert.equal(requests, 0);
+  } finally {
+    server.close();
+  }
+});
+
+test("--map with a valid slug crawls just that map", async () => {
+  const { createServer: cs } = await import("node:http");
+  const server = cs((req, res) => {
+    const routes = routesFor(server.address().port);
+    const body = routes[req.url];
+    if (body === undefined) {
+      res.writeHead(404);
+      res.end();
+      return;
+    }
+    res.writeHead(200, { "content-type": "text/html" });
+    res.end(body);
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  try {
+    const stats = await crawlEaterMaps({ baseUrl, write: false, map: "map-a" });
+    assert.equal(stats.mapsDiscovered, 1);
+    assert.equal(stats.mapsFetched, 1);
+    assert.equal(stats.entries, 1);
+  } finally {
+    server.close();
+  }
+});
+
+test("write run refreshes rotated validators on hash-unchanged 200", async () => {
+  const { createServer: cs } = await import("node:http");
+  // The server rotates its ETag between runs while serving a byte-identical
+  // body and ignoring conditional headers: the second run must learn the
+  // new validator through the not-modified skip path.
+  let etag = '"v1"';
+  const server = cs((req, res) => {
+    if (req.url === "/robots.txt") {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("User-agent: *\nAllow: /maps/\nDisallow: /search\n");
+      return;
+    }
+    const port = server.address().port;
+    const fix = (s) => s.replaceAll("PORT", String(port));
+    if (req.url === "/maps/map-a") {
+      res.writeHead(200, { "content-type": "text/html", etag });
+      res.end(fix(mapHtml("Map A", "map-a", [pt("Alpha", "1 Main St, New York, NY 10001")])));
+      return;
+    }
+    res.writeHead(404);
+    res.end();
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const dir = mkdtempSync(join(tmpdir(), "eater-crawl-"));
+  const dbPath = join(dir, "test.db");
+  const snapshotDir = join(dir, "snapshots");
+  const cachePath = join(
+    snapshotDir,
+    `.fetch-cache-${createHash("sha1").update(resolve(dbPath), "utf8").digest("hex").slice(0, 12)}.json`
+  );
+  try {
+    const first = await crawlEaterMaps({ baseUrl, write: true, dbPath, snapshotDir, map: "map-a" });
+    assert.equal(first.mapsFetched, 1);
+    assert.equal(JSON.parse(readFileSync(cachePath, "utf8"))[`${baseUrl}/maps/map-a`].etag, '"v1"');
+    etag = '"v2"';
+    const second = await crawlEaterMaps({ baseUrl, write: true, dbPath, snapshotDir, map: "map-a" });
+    assert.equal(second.mapsNotModified, 1);
+    assert.equal(second.mapsFetched, 0);
+    // The skip path committed the refreshed validators: the cache now
+    // carries the rotated ETag instead of the stale v1 one.
+    assert.equal(JSON.parse(readFileSync(cachePath, "utf8"))[`${baseUrl}/maps/map-a`].etag, '"v2"');
+  } finally {
+    server.close();
+    closeDb();
+  }
 });
