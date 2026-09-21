@@ -242,7 +242,7 @@ test("conditional request: ETag match returns not-modified", async () => {
   const first = await f.fetch("https://ny.eater.com/maps/a", "a");
   assert.equal(first.status, 200);
   assert.ok(first.snapshotPath);
-  f.commitCache("https://ny.eater.com/maps/a", first);
+  f.commitCache(first);
   const second = await f.fetch("https://ny.eater.com/maps/a", "a");
   assert.equal(second.status, "not-modified");
   assert.equal(second.unchanged, true);
@@ -258,7 +258,7 @@ test("same content hash without 304 is recognised as unchanged", async () => {
   });
   const first = await f.fetch("https://ny.eater.com/maps/a", "a");
   assert.equal(first.unchanged, false);
-  f.commitCache("https://ny.eater.com/maps/a", first);
+  f.commitCache(first);
   const second = await f.fetch("https://ny.eater.com/maps/a", "a");
   assert.equal(second.status, 200);
   assert.equal(second.unchanged, true);
@@ -283,7 +283,7 @@ test("unchanged 200 with rotated validators returns an updated cache state", asy
   const first = await f.fetch("https://ny.eater.com/maps/a", "a");
   assert.equal(first.unchanged, false);
   assert.equal(first.cacheState.etag, '"v1"');
-  f.commitCache("https://ny.eater.com/maps/a", first);
+  f.commitCache(first);
 
   const second = await f.fetch("https://ny.eater.com/maps/a", "a");
   assert.equal(second.status, 200);
@@ -292,7 +292,7 @@ test("unchanged 200 with rotated validators returns an updated cache state", asy
   assert.ok(second.cacheState);
   assert.equal(second.cacheState.etag, '"v2"');
   assert.equal(second.cacheState.lastModified, null);
-  f.commitCache("https://ny.eater.com/maps/a", second);
+  f.commitCache(second);
 
   const third = await f.fetch("https://ny.eater.com/maps/a", "a");
   assert.equal(third.status, "not-modified");
@@ -342,7 +342,7 @@ test("cache is committed explicitly, never as a fetch side effect", async () => 
   // After an explicit commit, a new instance sends conditional headers.
   const f = mk();
   const res = await f.fetch("https://ny.eater.com/maps/a", "a");
-  f.commitCache("https://ny.eater.com/maps/a", res);
+  f.commitCache(res);
   const second = await mk().fetch("https://ny.eater.com/maps/a", "a");
   assert.equal(conditionalServed, true);
   assert.equal(second.status, "not-modified");
@@ -359,7 +359,7 @@ test("conditional:false sends no conditional headers (index discovery)", async (
     },
   });
   const res = await f.fetch("https://ny.eater.com/maps", "index", { conditional: false });
-  f.commitCache("https://ny.eater.com/maps", res);
+  f.commitCache(res);
   await f.fetch("https://ny.eater.com/maps", "index", { conditional: false });
   assert.ok(seen.every((h) => !("If-None-Match" in h) && !("If-Modified-Since" in h)));
 });
@@ -470,4 +470,76 @@ test("snapshot writing is skipped without a snapshotDir", async () => {
   const res = await f.fetch("https://ny.eater.com/maps/a", "a");
   assert.equal(res.snapshotPath, null);
   assert.equal(res.unchanged, false);
+});
+
+test("redirected fetch uses the redirect target's cache entry, not the original URL's", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "eater-fetch-"));
+  const seen = [];
+  let phase = 1;
+  const f = new PoliteFetcher({
+    snapshotDir: dir,
+    minIntervalMs: 0,
+    fetchImpl: async (url, init) => {
+      seen.push({ url, headers: { ...(init?.headers ?? {}) } });
+      if (phase === 1) return okResponse("old-body", { etag: '"old-etag"' });
+      if (url === `${BASE}/maps/old`) return redirectResponse(`${BASE}/maps/new`);
+      if (init?.headers?.["If-None-Match"] === '"new-etag"') return new Response(null, { status: 304 });
+      return okResponse("new-body", { etag: '"new-etag"' });
+    },
+  });
+  // Phase 1: the original URL serves content directly; its entry is cached.
+  const first = await f.fetch(`${BASE}/maps/old`, "old");
+  assert.equal(first.status, 200);
+  assert.equal(first.effectiveUrl, `${BASE}/maps/old`);
+  f.commitCache(first);
+  // Phase 2: the original URL now redirects to a different map.
+  phase = 2;
+  seen.length = 0;
+  const second = await f.fetch(`${BASE}/maps/old`, "old");
+  assert.equal(second.status, 200);
+  assert.equal(second.url, `${BASE}/maps/old`);
+  assert.equal(second.effectiveUrl, `${BASE}/maps/new`);
+  // The stale validators for /maps/old must NOT be sent to /maps/new:
+  // a 304 from the target must never mark the original URL "already ingested".
+  const toNew = seen.find((s) => s.url === `${BASE}/maps/new`);
+  assert.ok(toNew);
+  assert.equal(toNew.headers["If-None-Match"], undefined);
+  f.commitCache(second);
+  // Phase 3: the redirect target now has its own entry, which is used.
+  seen.length = 0;
+  const third = await f.fetch(`${BASE}/maps/old`, "old");
+  assert.equal(third.status, "not-modified");
+  assert.equal(third.effectiveUrl, `${BASE}/maps/new`);
+  const toNewAgain = seen.find((s) => s.url === `${BASE}/maps/new`);
+  assert.equal(toNewAgain.headers["If-None-Match"], '"new-etag"');
+});
+
+test("validators committed after a redirect are keyed on the target, never the original URL", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "eater-fetch-"));
+  const seen = [];
+  let direct = false;
+  const f = new PoliteFetcher({
+    snapshotDir: dir,
+    minIntervalMs: 0,
+    fetchImpl: async (url, init) => {
+      seen.push({ url, headers: { ...(init?.headers ?? {}) } });
+      if (!direct && url === `${BASE}/maps/old`) return redirectResponse(`${BASE}/maps/new`);
+      if (init?.headers?.["If-None-Match"] === '"new-etag"') return new Response(null, { status: 304 });
+      return okResponse("new-body", { etag: '"new-etag"' });
+    },
+  });
+  const r1 = await f.fetch(`${BASE}/maps/old`, "old");
+  assert.equal(r1.status, 200);
+  assert.equal(r1.effectiveUrl, `${BASE}/maps/new`);
+  f.commitCache(r1);
+  // The original URL now serves its own content, which was never ingested.
+  direct = true;
+  seen.length = 0;
+  const r2 = await f.fetch(`${BASE}/maps/old`, "old");
+  // The redirect target's validators must not have been stored under the
+  // original URL: this fetch is fresh content, not "not-modified".
+  assert.equal(r2.status, 200);
+  assert.equal(r2.effectiveUrl, `${BASE}/maps/old`);
+  const req = seen.find((s) => s.url === `${BASE}/maps/old`);
+  assert.equal(req.headers["If-None-Match"], undefined);
 });

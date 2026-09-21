@@ -178,3 +178,14 @@ test("slug falls back to the fetch URL when permalink is absent", () => {
   assert.equal(page.slug, "test-map");
   assert.equal(page.url, URL);
 });
+
+test("__NEXT_DATA__ tolerates reordered attributes and extra attributes", () => {
+  const html = htmlWithPoints([point()]).replace(
+    '<script id="__NEXT_DATA__" type="application/json">',
+    '<script type="application/json" nonce="abc123" id="__NEXT_DATA__" data-x="1">'
+  );
+  const page = parseMapPage(html, URL);
+  assert.equal(page.title, "The Test Map");
+  assert.equal(page.entries.length, 1);
+  assert.equal(page.entries[0].name, "La Piraña Lechonera");
+});

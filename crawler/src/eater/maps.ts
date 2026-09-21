@@ -4,7 +4,7 @@
 // links, and collects every /maps/<slug> link. Pagination is bounded so a
 // runaway index cannot turn the crawler into a site spider.
 
-import type { FetchResult, PoliteFetcher } from "./fetcher.js";
+import type { FetchResult } from "./fetcher.js";
 import { EATER_BASE_URL, EATER_MAX_INDEX_PAGES } from "./types.js";
 
 /** Minimal surface discoverMaps needs — lets tests inject a stub. */

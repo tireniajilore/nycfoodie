@@ -38,6 +38,13 @@ export class FetchError extends Error {
 
 export interface FetchResult {
   url: string;
+  /**
+   * The URL that actually produced this result, after following redirects.
+   * Equals `url` when no redirect was followed. The cache is keyed on this
+   * URL — never on the pre-redirect one — so conditional validators from one
+   * map can never be applied to another map it redirects to.
+   */
+  effectiveUrl: string;
   /** 200 on fresh content, 304/"not-modified" when unchanged, 404 when gone. */
   status: number | "not-modified";
   body: string | null;
@@ -264,13 +271,14 @@ export class PoliteFetcher {
   }
 
   /**
-   * Persist a fetch result's cache state. Call only after the body has been
-   * fully processed (parsed and stored); never on dry runs, never after a
-   * failure. "Not modified" must always mean "already ingested".
+   * Persist a fetch result's cache state, keyed on the result's effective
+   * URL (post-redirect). Call only after the body has been fully processed
+   * (parsed and stored); never on dry runs, never after a failure. "Not
+   * modified" must always mean "already ingested".
    */
-  commitCache(url: string, result: FetchResult): void {
+  commitCache(result: FetchResult): void {
     if (!result.cacheState) return;
-    this.cache[url] = result.cacheState;
+    this.cache[result.effectiveUrl] = result.cacheState;
     this.saveCache();
   }
 
@@ -310,7 +318,6 @@ export class PoliteFetcher {
 
   private async doFetch(url: string, snapshotName?: string, opts?: FetchCallOptions): Promise<FetchResult> {
     const conditional = opts?.conditional !== false;
-    const cached = conditional ? this.cache[url] : undefined;
     // assertAllowed already parsed this URL in fetch(); it cannot fail here.
     const origin = new URL(url).origin;
     let currentUrl = url;
@@ -324,6 +331,14 @@ export class PoliteFetcher {
       const wait = this.minIntervalMs - (Date.now() - this.lastStart);
       if (wait > 0) await this.sleepImpl(wait);
       this.lastStart = Date.now();
+
+      // Resolve the cache entry per attempt, keyed on the CURRENT url: after
+      // a redirect hop the validators must come from the redirect target's
+      // entry, never the original URL's. Sending the original URL's ETag to a
+      // different map could 304-skip a map whose content this database never
+      // ingested — and the same-hash comparison below would compare the
+      // target's body against the wrong entry.
+      const cached = conditional ? this.cache[currentUrl] : undefined;
 
       const ctrl = new AbortController();
       // The timer bounds the whole attempt — headers AND body. A server that
@@ -364,10 +379,13 @@ export class PoliteFetcher {
         continue;
       }
       if (res.status === 304) {
-        return { url, status: "not-modified", body: null, unchanged: true, snapshotPath: null, cacheState: null };
+        // A 304 is only meaningful against the effective URL's own cache
+        // entry (looked up above on currentUrl): it can never mark the
+        // pre-redirect URL as "already ingested".
+        return { url, effectiveUrl: currentUrl, status: "not-modified", body: null, unchanged: true, snapshotPath: null, cacheState: null };
       }
       if (res.status === 404) {
-        return { url, status: 404, body: null, unchanged: false, snapshotPath: null, cacheState: null };
+        return { url, effectiveUrl: currentUrl, status: 404, body: null, unchanged: false, snapshotPath: null, cacheState: null };
       }
       if (res.status === 429) {
         if (attempt > this.maxRetries) {
@@ -414,7 +432,7 @@ export class PoliteFetcher {
           lastModified: res.headers.get("last-modified"),
           sha256: hash,
         };
-        return { url, status: 200, body, unchanged: true, snapshotPath: null, cacheState };
+        return { url, effectiveUrl: currentUrl, status: 200, body, unchanged: true, snapshotPath: null, cacheState };
       }
       // Snapshot first, cache second: a failed snapshot must not poison the
       // cache into believing this content was already preserved. When a
@@ -432,7 +450,7 @@ export class PoliteFetcher {
         sha256: hash,
       };
 
-      return { url, status: 200, body, unchanged: false, snapshotPath, cacheState };
+      return { url, effectiveUrl: currentUrl, status: 200, body, unchanged: false, snapshotPath, cacheState };
       } catch (e) {
         // Transient failures (network errors, body stalls) are retried with
         // backoff; intentional refusals (redirect policy, unexpected status,

@@ -35,10 +35,25 @@ function asString(v: unknown): string | null {
 
 /** Extract the __NEXT_DATA__ JSON payload, or throw. */
 function nextData(html: string, url: string): Record<string, unknown> {
-  const m = /<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/.exec(html);
-  if (!m) throw new EaterParseError(url, "no __NEXT_DATA__ payload (page structure changed?)");
+  // Attribute-tolerant: match any <script> tag whose id is __NEXT_DATA__,
+  // regardless of attribute order or extra attributes (a nonce, say). An
+  // exact-match regex on the full tag would break the whole map on a
+  // harmless upstream markup change.
+  const tagRe = /<script\b[^>]*>/gi;
+  let m: RegExpExecArray | null;
+  let payload: string | null = null;
+  while ((m = tagRe.exec(html)) !== null) {
+    const id = /\bid\s*=\s*("[^"]*"|'[^']*')/i.exec(m[0]);
+    if (!id || id[1].slice(1, -1) !== "__NEXT_DATA__") continue;
+    const rest = html.slice(m.index + m[0].length);
+    const close = /<\/script\s*>/i.exec(rest);
+    if (!close) break;
+    payload = rest.slice(0, close.index);
+    break;
+  }
+  if (payload === null) throw new EaterParseError(url, "no __NEXT_DATA__ payload (page structure changed?)");
   try {
-    const parsed: unknown = JSON.parse(m[1]);
+    const parsed: unknown = JSON.parse(payload);
     const rec = asRecord(parsed);
     if (!rec) throw new Error("top level is not an object");
     return rec;

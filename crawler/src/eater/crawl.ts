@@ -186,7 +186,7 @@ export async function crawlEaterMaps(opts: CrawlEaterMapsOptions = {}): Promise<
         // created the cache entry. Dry runs never commit cache state, and
         // commitCache is a no-op for 304s (no cacheState), so both skip
         // kinds flow through this safely.
-        if (write) fetcher.commitCache(url, result);
+        if (write) fetcher.commitCache(result);
         console.log(`  = ${slug}: not modified, skipping`);
         stats.mapsNotModified++;
         continue;
@@ -220,7 +220,7 @@ export async function crawlEaterMaps(opts: CrawlEaterMapsOptions = {}): Promise<
         // next run. Dry runs never commit, so a dry run can never poison a
         // later --write run's change detection.
         anyStored = true;
-        fetcher.commitCache(url, result);
+        fetcher.commitCache(result);
         console.log(`  ✓ ${slug}: "${page.title}" — ${page.entries.length} entries`);
       } else {
         stats.entries += page.entries.length;
