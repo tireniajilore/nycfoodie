@@ -708,7 +708,8 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
         "Get the full picture for one restaurant in one call: Infatuation rating (0–10), price tier, address, reservation link, booking intel, review summary, tags and every guide it appears in. Use when the user names a specific restaurant. Full review prose is opt-in via include_prose (default: headline and summary only). review.headline is the source's actual headline when one exists, otherwise null — use review.summary for the descriptive text. match_type is 'exact' when the id or name matched verbatim, 'fuzzy' when it was resolved from a partial/typo'd name — never present a fuzzy match as the venue the user named without saying so. booking is null when the source has no booking intel (not the same as walk-in-only); a reservation link alone never implies a booking policy. data_as_of is the dataset vintage and crawled_at is when this venue was last crawled — caveat fast-decaying claims (closures especially) when these are old.",
       annotations: READ_ONLY,
       inputSchema: {
-        id: z.string().describe("Canonical restaurant id, or a name to resolve"),
+        id: z.string().optional().describe("Canonical restaurant id, or a name to resolve"),
+        name: z.string().optional().describe("Alias for id: the restaurant's exact name"),
         city: cityParam,
         include_prose: z
           .boolean()
@@ -716,10 +717,15 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
           .describe("Include the full review text (default false: headline + summary only)"),
       },
     },
-    logged("get_restaurant", async ({ id, city, include_prose }) => {
-      const r = getRestaurant(db, city, id, include_prose ?? false);
+    logged("get_restaurant", async ({ id, name, city, include_prose }) => {
+      const key = id ?? name;
+      if (!key)
+        return json({
+          error: "get_restaurant needs 'id' (a UUID or exact name); 'name' works as an alias.",
+        });
+      const r = getRestaurant(db, city, key, include_prose ?? false);
       if (r) return json(r);
-      return notFound(id, city);
+      return notFound(key, city);
     })
   );
 
@@ -727,18 +733,32 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
     "compare_restaurants",
     {
       description:
-        "Compare 2–3 named restaurants head-to-head as structured data (rating, price, tags, review summary). Use when the user asks to choose between specific places, e.g. 'should I go to X or Y?'.",
+        "Compare 2–5 named restaurants head-to-head as structured data (rating, price, tags, review summary). Use when the user asks to choose between specific places, e.g. 'should I go to X or Y?' or to compare four options on a budget.",
       annotations: READ_ONLY,
       inputSchema: {
         restaurants: z
           .array(z.string())
           .min(2)
-          .max(3)
+          .max(5)
+          .optional()
           .describe("Restaurant ids or names to compare"),
+        ids: z
+          .array(z.string())
+          .min(2)
+          .max(5)
+          .optional()
+          .describe("Alias for restaurants"),
         city: cityParam,
       },
     },
-    logged("compare_restaurants", async ({ restaurants, city }) => json(compareRestaurants(db, city, restaurants)))
+    logged("compare_restaurants", async ({ restaurants, ids, city }) => {
+      const list = restaurants ?? ids;
+      if (!list)
+        return json({
+          error: "compare_restaurants needs 'restaurants' (2–5 ids or names); 'ids' works as an alias.",
+        });
+      return json(compareRestaurants(db, city, list));
+    })
   );
 
   server.registerTool(
@@ -769,15 +789,21 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
         "Find restaurants similar to a named one, scored by shared cuisine, occasion and neighbourhood tags, price-tier proximity and guide co-occurrence. Use for 'like X' or 'alternatives to X' requests.",
       annotations: READ_ONLY,
       inputSchema: {
-        id: z.string().describe("Canonical restaurant id, or a name to resolve"),
+        id: z.string().optional().describe("Canonical restaurant id, or a name to resolve"),
+        name: z.string().optional().describe("Alias for id: the restaurant's exact name"),
         city: cityParam,
         limit: limitParam,
       },
     },
-    logged("find_similar", async ({ id, city, limit }) => {
-      const r = findSimilar(db, city, id, limit ?? 10);
+    logged("find_similar", async ({ id, name, city, limit }) => {
+      const key = id ?? name;
+      if (!key)
+        return json({
+          error: "find_similar needs 'id' (a UUID or exact name); 'name' works as an alias.",
+        });
+      const r = findSimilar(db, city, key, limit ?? 10);
       if (r) return json(r);
-      return notFound(id, city);
+      return notFound(key, city);
     })
   );
 
