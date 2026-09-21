@@ -12,6 +12,7 @@ import Database from "better-sqlite3";
 import { migrate } from "../dist/migrate.js";
 import { closeDb } from "../dist/index.js";
 import { runBackfill } from "../dist/backfill-eater-tags.js";
+import { LOCALITY_ALIASES } from "../dist/backfill-eater-tags.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const dbSrc = join(root, "..", "nycfoodie.db");
@@ -247,6 +248,12 @@ test("eater-scoped rows never feed the neighbourhood vocabulary", () => {
     const rw = new Database(db);
     // A label the backfill would genuinely tag: an eater-only listing whose
     // locality matches a canonical infatuation neighbourhood label.
+    // Deterministic (ORDER BY) and never an alias target: the test deletes
+    // the canonical row below, and deleting an alias target would trip the
+    // pre-flight alias check spuriously.
+    const aliasTargets = Object.values(LOCALITY_ALIASES)
+      .map((l) => `'${l.replace(/'/g, "''")}'`)
+      .join(", ");
     const seed = rw
       .prepare(
         `SELECT t.label AS label, t.slug AS slug
@@ -254,9 +261,10 @@ test("eater-scoped rows never feed the neighbourhood vocabulary", () => {
          JOIN tags t ON t.kind = 'neighborhood' AND t.source_slug = 'infatuation'
            AND lower(t.label) = lower(trim(sl.locality))
          WHERE sl.source_slug = 'eater' AND sl.locality IS NOT NULL
+           AND t.label NOT IN (${aliasTargets})
            AND NOT EXISTS (SELECT 1 FROM source_listings s2
                            WHERE s2.restaurant_id = sl.restaurant_id AND s2.source_slug <> 'eater')
-         LIMIT 1`
+         ORDER BY t.label LIMIT 1`
       )
       .get();
     assert.ok(seed, "seed fixture: eater-only listing with a canonical locality");

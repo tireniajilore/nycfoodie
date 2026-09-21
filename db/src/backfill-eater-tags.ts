@@ -110,7 +110,9 @@ const GUIDE_THEME_MAP: Array<[string, string, string]> = [
 // is aliased — 'New York' and 'Manhattan' have no canonical label and stay
 // untagged rather than guessed. No labels are coined: every target label is
 // verified against the existing neighbourhood vocabulary at runtime.
-const LOCALITY_ALIASES: Record<string, string> = {
+// Exported for tests: fixtures must avoid alias targets when they delete
+// canonical rows, or the pre-flight alias check fails spuriously.
+export const LOCALITY_ALIASES: Record<string, string> = {
   bronx: "The Bronx",
 };
 
@@ -384,9 +386,16 @@ export function runBackfill(dbPath: string, mode: "dry-run" | "write"): Backfill
           }
         }
         // Negative controls inside the transaction: any failure rolls back.
+        // Every control compares against the pre-run snapshot: the invariant
+        // is "this script created/changed nothing here", not "the dataset
+        // happens to have zero" — pre-existing rows must not trip the guard.
         const after = negativeControls();
-        if (after.eater_occasion_tags !== 0) fail("negative control: eater occasion tag created");
-        if (after.eater_unexpected_tag_kinds !== 0) fail("negative control: eater tag of unexpected kind created");
+        if (after.eater_occasion_tags !== controlsBefore.eater_occasion_tags) {
+          fail("negative control: eater occasion tag created");
+        }
+        if (after.eater_unexpected_tag_kinds !== controlsBefore.eater_unexpected_tag_kinds) {
+          fail("negative control: eater tag of unexpected kind created");
+        }
         if (after.eater_listings_with_rating !== controlsBefore.eater_listings_with_rating) {
           fail("negative control: eater listing rating changed");
         }
