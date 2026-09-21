@@ -80,7 +80,19 @@ test("dry run changes nothing and reports honest coverage", () => {
     const after = counts(db);
     assert.deepEqual(after, before, "dry run must not change any counts");
     assert.equal(report.mode, "dry-run");
-    assert.equal(report.eaterOnlyRestaurants, 404);
+    // DB-derived, not hard-coded: the count must match the backfill's own
+    // eater-only definition so the test survives dataset refreshes.
+    const eaterOnlyProbe = new Database(db, { readonly: true });
+    const eaterOnlyDerived = eaterOnlyProbe
+      .prepare(
+        `SELECT COUNT(*) AS n FROM restaurants r WHERE r.city_slug = 'new-york'
+         AND EXISTS (SELECT 1 FROM source_listings sl WHERE sl.restaurant_id = r.id AND sl.source_slug = 'eater')
+         AND NOT EXISTS (SELECT 1 FROM source_listings sl WHERE sl.restaurant_id = r.id AND sl.source_slug <> 'eater')`
+      )
+      .get().n;
+    eaterOnlyProbe.close();
+    assert.ok(eaterOnlyDerived > 0, "dataset has eater-only restaurants");
+    assert.equal(report.eaterOnlyRestaurants, eaterOnlyDerived, "report count matches the dataset");
     assert.ok(report.cuisine.venuesGained > 0, "some venues gain cuisine tags");
     assert.ok(report.neighbourhood.venuesGained > 0, "some venues gain neighbourhood tags");
     assert.ok(
@@ -88,6 +100,64 @@ test("dry run changes nothing and reports honest coverage", () => {
       "coverage is partial by design, not 100%"
     );
     assert.equal(report.negativeControls.eater_occasion_tags, 0);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("pre-flight fails loudly when migration 015 has not been applied", () => {
+  const { dir, db } = scratchDb();
+  try {
+    // No migrate(): the dataset copy lacks assigned_by/assigned_at.
+    // counts() itself needs the 015 columns, so snapshot raw totals instead.
+    const snap = () => {
+      const p = new Database(db, { readonly: true });
+      try {
+        return {
+          tags: p.prepare("SELECT COUNT(*) AS n FROM tags").get().n,
+          listingTags: p.prepare("SELECT COUNT(*) AS n FROM listing_tags").get().n,
+        };
+      } finally {
+        p.close();
+      }
+    };
+    const before = snap();
+    assert.throws(() => runBackfill(db, "write"), /assigned_by\/assigned_at/, "write aborts without migration 015");
+    assert.throws(
+      () => runBackfill(db, "dry-run"),
+      /assigned_by\/assigned_at/,
+      "dry run aborts without migration 015"
+    );
+    assert.deepEqual(snap(), before, "aborted run changes nothing");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("unmatched-listing guard aborts the write before changing anything", () => {
+  const { dir, db } = scratchDb();
+  try {
+    migrate(db);
+    closeDb();
+    const probe0 = new Database(db, { readonly: true });
+    const total = probe0.prepare("SELECT COUNT(*) AS n FROM source_listings WHERE source_slug = 'eater'").get().n;
+    const unmatched = probe0
+      .prepare("SELECT COUNT(*) AS n FROM source_listings WHERE source_slug = 'eater' AND restaurant_id IS NULL")
+      .get().n;
+    probe0.close();
+    const need = Math.floor(total * 0.05) + 1 - unmatched;
+    assert.ok(need > 0 && need < total, "test needs headroom under the 5% threshold");
+    const rw = new Database(db);
+    rw.prepare(
+      `UPDATE source_listings SET restaurant_id = NULL WHERE id IN (
+         SELECT id FROM source_listings
+         WHERE source_slug = 'eater' AND restaurant_id IS NOT NULL LIMIT ${need}
+       )`
+    ).run();
+    rw.close();
+    const before = counts(db);
+    assert.throws(() => runBackfill(db, "write"), /backfill aborted/, "aborts over the 5% threshold");
+    assert.deepEqual(counts(db), before, "aborted run changes nothing");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
