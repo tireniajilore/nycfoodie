@@ -32,8 +32,10 @@ import {
 } from "./store.js";
 import { closeDb } from "nycfoodie-db";
 import type { RawPostReview } from "./infatuation/types.js";
+import { crawlEaterMaps, printStats } from "./eater/crawl.js";
 
 function arg(name: string, def: string): string;
+function arg(name: string): string | undefined;
 function arg(name: string, def?: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
   if (i === -1) return def;
@@ -317,6 +319,38 @@ async function cmdGoogleVerify(): Promise<void> {
   console.log(`Done: ${matched} matched, ${closed} non-operational flagged.`);
 }
 
+async function cmdEaterMaps(): Promise<void> {
+  // Maps-only Eater crawler (docs/eater-enrichment-spec.md §4.1).
+  // Polite by construction: 1 req/s, 1 concurrent connection, contact UA,
+  // robots.txt check, backoff on 429/503, raw HTML snapshots per crawl.
+  const city = arg("city", "new-york");
+  const write = flag("write");
+  const dbPath = arg("db", "./nycfoodie.db");
+  const map = arg("map");
+  const maxMapsRaw = arg("max-maps");
+  const maxMaps = maxMapsRaw !== undefined ? parseInt(maxMapsRaw, 10) : undefined;
+  const snapshotDir = write ? arg("snapshot-dir", "./snapshots/eater") : arg("snapshot-dir");
+  const baseUrl = arg("base-url", "https://ny.eater.com");
+
+  if (write) {
+    console.log(
+      `Crawling Eater maps for city=${city} (WRITE to ${dbPath}, snapshots to ${snapshotDir})…`
+    );
+  } else {
+    console.log(`Crawling Eater maps for city=${city} (dry run, no writes)…`);
+  }
+  const stats = await crawlEaterMaps({
+    city,
+    dbPath,
+    baseUrl,
+    map,
+    maxMaps: Number.isFinite(maxMaps) ? maxMaps : undefined,
+    write,
+    snapshotDir: snapshotDir ?? null,
+  });
+  printStats(stats);
+}
+
 const [cmd] = process.argv.slice(2);
 
 switch (cmd) {
@@ -332,6 +366,9 @@ switch (cmd) {
   case "enrich":
     await cmdEnrich();
     break;
+  case "eater-maps":
+    await cmdEaterMaps();
+    break;
   case undefined:
   case "help":
   case "--help":
@@ -341,6 +378,7 @@ Usage:
   nycfoodie-crawl reviews --city new-york [--max-pages N] [--write] [--enrich] [--db PATH]
   nycfoodie-crawl google-verify --city new-york --limit N --db PATH
   nycfoodie-crawl guides --city new-york [--limit N] [--write] [--db PATH]
+  nycfoodie-crawl eater-maps --city new-york [--map SLUG] [--max-maps N] [--write] [--db PATH] [--snapshot-dir DIR]
 
 Options (reviews):
   --city       City slug (default: new-york)
@@ -358,6 +396,16 @@ Options (guides):
   --limit      Max guides to fetch (default: 3)
   --write      Write to the database (default: dry run, no writes)
   --db         SQLite path (default: ./nycfoodie.db)
+
+Options (eater-maps):
+  --map          Crawl exactly one map slug (skips index discovery)
+  --max-maps     Cap on maps fetched (default: no cap)
+  --write        Write to the database (default: dry run, no writes)
+  --db           SQLite path (default: ./nycfoodie.db)
+  --snapshot-dir Raw HTML snapshot directory (default with --write: ./snapshots/eater)
+  --base-url     Eater site root (default: https://ny.eater.com)
+  Polite by construction: 1 req/s, 1 concurrent connection, contact user
+  agent, robots.txt check, backoff on 429/503.
 
 Options (enrich):
   --limit       Max listings to enrich (default: 50). Highest-rated first.

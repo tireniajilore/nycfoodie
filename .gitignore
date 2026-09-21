@@ -12,3 +12,6 @@ nycfoodie-mcp-calls.jsonl
 
 **/src/**/*.js
 **/src/**/*.d.ts
+
+# Eater crawler raw HTML snapshots (large, re-fetchable)
+snapshots/
