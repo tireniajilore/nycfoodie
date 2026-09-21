@@ -27,6 +27,7 @@ if (!prNumber) {
   console.log("No pull request in event payload — skipping.");
   process.exit(0);
 }
+const headSha = (event.pull_request?.head?.sha ?? "unknown").slice(0, 7);
 
 const gh = (path, opts = {}) =>
   fetch(`https://api.github.com${path}`, {
@@ -107,7 +108,7 @@ const review = (await aiRes.json()).choices[0].message.content;
 
 const body =
   `${MARKER}\n` +
-  `## 🤖 AI code review (${model})\n\n${review}\n\n` +
+  `## 🤖 AI code review (${model}) — \`${headSha}\`\n\n${review}\n\n` +
   `<sub>Automated review — treat as a second opinion, not a verdict.</sub>`;
 
 // 4. Create or update the bot's comment so re-pushes don't spam the thread.
@@ -115,18 +116,43 @@ const comments = await gh(
   `/repos/${owner}/${repo}/issues/${prNumber}/comments?per_page=100`
 ).then((r) => r.json());
 const existing = comments.find((c) => c.body?.includes(MARKER));
+let reviewCommentId;
 if (existing) {
   await gh(`/repos/${owner}/${repo}/issues/comments/${existing.id}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ body }),
   });
+  reviewCommentId = existing.id;
   console.log(`Updated review comment ${existing.id}.`);
 } else {
-  await gh(`/repos/${owner}/${repo}/issues/${prNumber}/comments`, {
+  const created = await gh(`/repos/${owner}/${repo}/issues/${prNumber}/comments`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ body }),
-  });
+  }).then((r) => r.json());
+  reviewCommentId = created.id;
   console.log("Posted new review comment.");
 }
+
+// 5. Post a short per-run signal comment. The full review above is edited in
+// place, which produces no thread event — without this, a new verdict on a
+// new push is invisible and nobody knows the review landed. One comment per
+// run is the visible "the review is in" signal; it links the full review.
+const verdictLine =
+  review
+    .split("\n")
+    .map((l) => l.trim())
+    .find((l) => l.length > 0)
+    ?.slice(0, 200) ?? "review posted";
+await gh(`/repos/${owner}/${repo}/issues/${prNumber}/comments`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    body:
+      `<!-- ai-pr-review-signal -->\n` +
+      `🤖 AI review for \`${headSha}\`: ${verdictLine}\n\n` +
+      `[Full review](https://github.com/${owner}/${repo}/pull/${prNumber}#issuecomment-${reviewCommentId})`,
+  }),
+});
+console.log(`Posted review signal for ${headSha}.`);

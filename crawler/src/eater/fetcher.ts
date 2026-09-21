@@ -11,7 +11,7 @@
 // - /search (and friends) can never be fetched, whatever the caller asks
 
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import {
   EATER_FETCH_TIMEOUT_MS,
@@ -188,6 +188,19 @@ export class PoliteFetcher {
       .slice(0, 12);
     this.cachePath = this.snapshotDir ? join(this.snapshotDir, `.fetch-cache-${scopeHash}.json`) : null;
     if (this.cachePath && !opts.ignoreCache) this.cache = this.loadCache();
+    if (this.cachePath && opts.ignoreCache) {
+      // The cache belongs to the database that produced it. A run that
+      // ignores the cache is working with a fresh database, so a stale
+      // cache file left by a previous database at the same path is deleted —
+      // not just skipped in memory — or a later run could trust it for maps
+      // this database never ingested. Best-effort: a failed delete must not
+      // fail a crawl.
+      try {
+        rmSync(this.cachePath, { force: true });
+      } catch {
+        // ignore
+      }
+    }
   }
 
   private loadCache(): Record<string, CacheEntry> {

@@ -125,31 +125,39 @@ export async function crawlEaterMaps(opts: CrawlEaterMapsOptions = {}): Promise<
     ignoreCache = !hasEaterCrawlState(city);
   }
 
-  const fetcher = new PoliteFetcher({
-    userAgent,
-    // Honour a robots crawl-delay on top of our own 1 req/s floor.
-    minIntervalMs: Math.max(EATER_MIN_INTERVAL_MS, crawlDelayMs ?? 0),
-    snapshotDir: opts.snapshotDir ?? null,
-    // Scope the cache file to the database path: two databases sharing one
-    // snapshot directory must never share change-detection state.
-    cacheScope: resolve(opts.dbPath ?? "./nycfoodie.db"),
-    ignoreCache,
-    // Per-request robots enforcement: the initial /maps/ probe is not enough —
-    // a rule could disallow a specific map path the index links to.
-    urlAllowed: (url) => robotsAllows(groups, userAgent, url),
-    urlBlockedMessage: (url) => `robots.txt disallows ${url} for this user agent`,
-  });
-
-  let mapUrls: string[];
-  if (mapSlug !== null) {
-    mapUrls = [`${baseUrl}/maps/${mapSlug}`];
-  } else {
-    mapUrls = await discoverMaps(fetcher, { baseUrl });
-  }
-  stats.mapsDiscovered = mapUrls.length;
-  if (opts.maxMaps !== undefined) mapUrls = mapUrls.slice(0, Math.max(0, opts.maxMaps));
-
+  // The try/finally covers everything after DB initialisation: if index
+  // discovery (or anything else) throws, the connection is still closed.
   try {
+    const fetcher = new PoliteFetcher({
+      userAgent,
+      // Honour a robots crawl-delay on top of our own 1 req/s floor.
+      minIntervalMs: Math.max(EATER_MIN_INTERVAL_MS, crawlDelayMs ?? 0),
+      snapshotDir: opts.snapshotDir ?? null,
+      // Scope the cache file to the database path: two databases sharing one
+      // snapshot directory must never share change-detection state.
+      cacheScope: resolve(opts.dbPath ?? "./nycfoodie.db"),
+      ignoreCache,
+      // Per-request robots enforcement: the initial /maps/ probe is not enough —
+      // a rule could disallow a specific map path the index links to.
+      urlAllowed: (url) => robotsAllows(groups, userAgent, url),
+      urlBlockedMessage: (url) => `robots.txt disallows ${url} for this user agent`,
+    });
+
+    let mapUrls: string[];
+    if (mapSlug !== null) {
+      mapUrls = [`${baseUrl}/maps/${mapSlug}`];
+    } else {
+      mapUrls = await discoverMaps(fetcher, { baseUrl });
+    }
+    stats.mapsDiscovered = mapUrls.length;
+    if (opts.maxMaps !== undefined) mapUrls = mapUrls.slice(0, Math.max(0, opts.maxMaps));
+
+    // Tracks whether this run actually ingested anything. Crawl state is
+    // only recorded when true (see below): a zero-store run must not mark
+    // the DB as crawled, or the next run would trust the fetch cache for
+    // maps this database never ingested.
+    let anyStored = false;
+
     for (const url of mapUrls) {
       const slug = mapSlugFromUrl(url);
       let result: FetchResult;
@@ -211,6 +219,7 @@ export async function crawlEaterMaps(opts: CrawlEaterMapsOptions = {}): Promise<
         // failed to store must be refetched — never 304-skipped — on the
         // next run. Dry runs never commit, so a dry run can never poison a
         // later --write run's change detection.
+        anyStored = true;
         fetcher.commitCache(url, result);
         console.log(`  ✓ ${slug}: "${page.title}" — ${page.entries.length} entries`);
       } else {
@@ -219,7 +228,12 @@ export async function crawlEaterMaps(opts: CrawlEaterMapsOptions = {}): Promise<
       }
     }
 
-    if (write) {
+    // Record crawl state only when this run ingested at least one map. A
+    // zero-store run (fresh DB, every map failed, or --maxMaps 0) must not
+    // mark the database as crawled: hasEaterCrawlState gates whether the
+    // fetch cache is trusted, and "not modified" must mean "ingested by
+    // this database", never "ingested by nobody".
+    if (write && anyStored) {
       recordEaterCrawlState(city, "maps", stats.mapsFetched, null);
     }
   } finally {

@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { closeDb } from "nycfoodie-db";
+import { closeDb, getDb } from "nycfoodie-db";
 import { assertMapsCrawlable, crawlEaterMaps } from "../dist/eater/crawl.js";
 
 function mapHtml(title, slug, points) {
@@ -560,6 +560,99 @@ test("write run refreshes rotated validators on hash-unchanged 200", async () =>
     // The skip path committed the refreshed validators: the cache now
     // carries the rotated ETag instead of the stale v1 one.
     assert.equal(JSON.parse(readFileSync(cachePath, "utf8"))[`${baseUrl}/maps/map-a`].etag, '"v2"');
+  } finally {
+    server.close();
+    closeDb();
+  }
+});
+
+test("write mode closes the DB when map discovery fails", async () => {
+  const { createServer: cs } = await import("node:http");
+  const server = cs((req, res) => {
+    if (req.url === "/robots.txt") {
+      res.writeHead(200, { "content-type": "text/plain" });
+      res.end("User-agent: *\nAllow: /maps/\nDisallow: /search\n");
+      return;
+    }
+    // Non-retryable failure on the index: discovery throws immediately.
+    res.writeHead(403);
+    res.end();
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const dir = mkdtempSync(join(tmpdir(), "eater-crawl-"));
+  const dbPath = join(dir, "test.db");
+  try {
+    await assert.rejects(() => crawlEaterMaps({ baseUrl, write: true, dbPath }), /unexpected HTTP 403/);
+    // The DB was opened before discovery ran: it must be closed even
+    // though the failure happened before the crawl loop's try/finally.
+    assert.throws(() => getDb(), /Database not open/);
+  } finally {
+    server.close();
+    closeDb();
+  }
+});
+
+test("a fresh-DB write run that stores nothing records no crawl state and drops the stale cache", async () => {
+  const { createServer: cs } = await import("node:http");
+  const server = cs((req, res) => {
+    const routes = routesFor(server.address().port);
+    const body = routes[req.url];
+    if (body === undefined) {
+      res.writeHead(404);
+      res.end();
+      return;
+    }
+    // Behave like a real conditional server: 304 when the client has state.
+    if (req.headers["if-none-match"]) {
+      res.writeHead(304);
+      res.end();
+      return;
+    }
+    res.writeHead(200, { "content-type": "text/html", etag: '"v1"' });
+    res.end(body);
+  });
+  await new Promise((r) => server.listen(0, "127.0.0.1", r));
+  const baseUrl = `http://127.0.0.1:${server.address().port}`;
+  const dir = mkdtempSync(join(tmpdir(), "eater-crawl-"));
+  const dbPath = join(dir, "test.db");
+  const snapshotDir = join(dir, "snapshots");
+  mkdirSync(snapshotDir, { recursive: true });
+  // Plant a stale cache file from a previous database era at the same path:
+  // its ETags match the server, so a run that trusted it would 304-skip
+  // every map and ingest nothing.
+  const cachePath = join(
+    snapshotDir,
+    `.fetch-cache-${createHash("sha1").update(resolve(dbPath), "utf8").digest("hex").slice(0, 12)}.json`
+  );
+  const staleEntry = { etag: '"v1"', lastModified: null, sha256: "deadbeef" };
+  writeFileSync(
+    cachePath,
+    JSON.stringify({ [`${baseUrl}/maps/map-a`]: staleEntry, [`${baseUrl}/maps/map-b`]: staleEntry })
+  );
+  try {
+    // Run 1: fresh DB, but stores nothing (--maxMaps 0).
+    const first = await crawlEaterMaps({ baseUrl, write: true, dbPath, snapshotDir, maxMaps: 0 });
+    assert.equal(first.mapsDiscovered, 2);
+    assert.equal(first.mapsFetched, 0);
+    assert.equal(first.listingsUpserted, 0);
+    // Nothing ingested, so no crawl state: the next run must treat this DB
+    // as fresh and ignore the fetch cache again.
+    const { default: Database } = await import("better-sqlite3");
+    const db = new Database(dbPath, { readonly: true });
+    try {
+      assert.equal(db.prepare(`SELECT COUNT(*) c FROM crawl_state WHERE source_slug='eater'`).get().c, 0);
+    } finally {
+      db.close();
+    }
+    // The stale cache file was dropped when the fresh-DB run ignored it.
+    assert.throws(() => readFileSync(cachePath), /ENOENT/);
+    // Run 2: still a fresh DB — everything is fetched and ingested, never
+    // 304-skipped on the back of the stale cache.
+    const second = await crawlEaterMaps({ baseUrl, write: true, dbPath, snapshotDir });
+    assert.equal(second.mapsNotModified, 0);
+    assert.equal(second.mapsFetched, 2);
+    assert.equal(second.listingsUpserted, 3);
   } finally {
     server.close();
     closeDb();
