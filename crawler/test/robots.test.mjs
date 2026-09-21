@@ -64,6 +64,21 @@ test("specific UA group overrides the wildcard group", () => {
   assert.equal(robotsAllows(groups, "OtherBot/1.0", `${BASE}/search`), false);
 });
 
+test("UA matching is precise: version suffix matches, unrelated suffix does not", () => {
+  const groups = parseRobotsTxt(
+    "User-agent: nycfoodie-crawler-bad\nDisallow: /maps/\n\n" +
+      "User-agent: nycfoodie-crawler/1.0\nDisallow: /private\n\n" +
+      "User-agent: *\nAllow: /maps/\n"
+  );
+  const applicable = groupsForAgent(groups, UA);
+  // "nycfoodie-crawler-bad" must NOT match our "nycfoodie-crawler" token,
+  // but the version-suffixed "nycfoodie-crawler/1.0" matches at the boundary.
+  assert.equal(applicable.length, 1);
+  assert.deepEqual(applicable[0].agents, ["nycfoodie-crawler/1.0"]);
+  assert.equal(robotsAllows(groups, UA, `${BASE}/maps/x`), true);
+  assert.equal(robotsAllows(groups, UA, `${BASE}/private`), false);
+});
+
 test("crawl-delay is read from the applicable group", () => {
   const groups = parseRobotsTxt(SAMPLE);
   assert.equal(robotsCrawlDelayMs(groups, UA), 2000);

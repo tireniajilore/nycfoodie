@@ -156,6 +156,7 @@ test("conditional request: ETag match returns not-modified", async () => {
   const first = await f.fetch("https://ny.eater.com/maps/a", "a");
   assert.equal(first.status, 200);
   assert.ok(first.snapshotPath);
+  f.commitCache("https://ny.eater.com/maps/a", first);
   const second = await f.fetch("https://ny.eater.com/maps/a", "a");
   assert.equal(second.status, "not-modified");
   assert.equal(second.unchanged, true);
@@ -171,6 +172,7 @@ test("same content hash without 304 is recognised as unchanged", async () => {
   });
   const first = await f.fetch("https://ny.eater.com/maps/a", "a");
   assert.equal(first.unchanged, false);
+  f.commitCache("https://ny.eater.com/maps/a", first);
   const second = await f.fetch("https://ny.eater.com/maps/a", "a");
   assert.equal(second.status, 200);
   assert.equal(second.unchanged, true);
@@ -196,7 +198,7 @@ test("changed content writes a new snapshot and updates the cache", async () => 
   assert.equal(readFileSync(second.snapshotPath, "utf8"), "<html>v2</html>");
 });
 
-test("a fresh fetcher reuses the persisted cache (304 across restarts)", async () => {
+test("cache is committed explicitly, never as a fetch side effect", async () => {
   const dir = mkdtempSync(join(tmpdir(), "eater-fetch-"));
   let conditionalServed = false;
   const mk = () =>
@@ -210,41 +212,110 @@ test("a fresh fetcher reuses the persisted cache (304 across restarts)", async (
         return okResponse("<html>p</html>", { etag: '"persist1"' });
       },
     });
-  await mk().fetch("https://ny.eater.com/maps/a", "a");
+  // A bare fetch reads the cache but never writes it: no persistent side effects.
+  const first = await mk().fetch("https://ny.eater.com/maps/a", "a");
+  assert.equal(first.status, 200);
+  assert.ok(first.cacheState);
+  const uncommitted = await mk().fetch("https://ny.eater.com/maps/a", "a");
+  assert.equal(uncommitted.status, 200); // no If-None-Match was sent
+  assert.equal(conditionalServed, false);
+  // After an explicit commit, a new instance sends conditional headers.
+  const f = mk();
+  const res = await f.fetch("https://ny.eater.com/maps/a", "a");
+  f.commitCache("https://ny.eater.com/maps/a", res);
   const second = await mk().fetch("https://ny.eater.com/maps/a", "a");
   assert.equal(conditionalServed, true);
   assert.equal(second.status, "not-modified");
 });
 
-test("redirect outside the maps area is refused", async () => {
+test("conditional:false sends no conditional headers (index discovery)", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "eater-fetch-"));
+  const seen = [];
   const f = new PoliteFetcher({
-    fetchImpl: async () => ({
-      status: 200,
-      redirected: true,
-      url: "https://ny.eater.com/nyc/best-pizza-katzs-deli",
-      headers: new Headers(),
-      text: async () => "<html>venue page</html>",
-      arrayBuffer: async () => new ArrayBuffer(0),
-    }),
+    snapshotDir: dir,
+    fetchImpl: async (_url, init) => {
+      seen.push({ ...init.headers });
+      return okResponse("<html>index</html>", { etag: '"idx1"' });
+    },
   });
-  await assert.rejects(f.fetch(`${BASE}/maps/some-map`, "some-map"), /redirected to disallowed URL/);
+  const res = await f.fetch("https://ny.eater.com/maps", "index", { conditional: false });
+  f.commitCache("https://ny.eater.com/maps", res);
+  await f.fetch("https://ny.eater.com/maps", "index", { conditional: false });
+  assert.ok(seen.every((h) => !("If-None-Match" in h) && !("If-Modified-Since" in h)));
 });
 
-test("redirect within the maps area is followed", async () => {
+function redirectResponse(location) {
+  return new Response(null, { status: 302, headers: { location } });
+}
+
+test("redirect target is validated before any request goes to it", async () => {
+  const requested = [];
   const f = new PoliteFetcher({
-    fetchImpl: async () => ({
-      status: 200,
-      ok: true,
-      redirected: true,
-      url: "https://ny.eater.com/maps/some-map/",
-      headers: new Headers(),
-      text: async () => "<html>map</html>",
-      arrayBuffer: async () => new ArrayBuffer(0),
-    }),
+    fetchImpl: async (url) => {
+      requested.push(url);
+      if (url === `${BASE}/maps/some-map`) return redirectResponse("https://evil.example/steal");
+      return okResponse("<html>never</html>");
+    },
+  });
+  await assert.rejects(f.fetch(`${BASE}/maps/some-map`, "some-map"), /redirect leaves origin/);
+  assert.deepEqual(requested, [`${BASE}/maps/some-map`]); // the target got zero requests
+});
+
+test("redirect outside the maps area is refused before following", async () => {
+  let calls = 0;
+  const f = new PoliteFetcher({
+    fetchImpl: async () => {
+      calls++;
+      return redirectResponse("https://ny.eater.com/nyc/best-pizza-katzs-deli");
+    },
+  });
+  await assert.rejects(f.fetch(`${BASE}/maps/some-map`, "some-map"), /redirect leaves the maps area/);
+  assert.equal(calls, 1);
+});
+
+test("redirect to a forbidden path is refused before following", async () => {
+  const f = new PoliteFetcher({
+    fetchImpl: async () => redirectResponse("https://ny.eater.com/search?q=sushi"),
+  });
+  // /search is outside the maps area, so the area check fires first; the
+  // forbidden-path check in the redirect validator is belt-and-braces.
+  await assert.rejects(f.fetch(`${BASE}/maps/some-map`, "some-map"), /redirect leaves the maps area/);
+});
+
+test("redirect within the maps area is followed after validation", async () => {
+  const requested = [];
+  const f = new PoliteFetcher({
+    fetchImpl: async (url) => {
+      requested.push(url);
+      if (url === `${BASE}/maps/some-map`) return redirectResponse(`${BASE}/maps/some-map/`);
+      return okResponse("<html>map</html>");
+    },
   });
   const res = await f.fetch(`${BASE}/maps/some-map`, "some-map");
   assert.equal(res.status, 200);
   assert.equal(res.body, "<html>map</html>");
+  assert.deepEqual(requested, [`${BASE}/maps/some-map`, `${BASE}/maps/some-map/`]);
+});
+
+test("redirect without a Location header fails", async () => {
+  const f = new PoliteFetcher({
+    fetchImpl: async () => new Response(null, { status: 302 }),
+  });
+  await assert.rejects(f.fetch(`${BASE}/maps/some-map`, "some-map"), /without a Location header/);
+});
+
+test("redirect loops are bounded", async () => {
+  let calls = 0;
+  const f = new PoliteFetcher({
+    minIntervalMs: 1,
+    fetchImpl: async (url) => {
+      calls++;
+      const n = Number(new URL(url).searchParams.get("n") ?? "0");
+      return redirectResponse(`${BASE}/maps/loop?n=${n + 1}`);
+    },
+  });
+  await assert.rejects(f.fetch(`${BASE}/maps/loop`, "loop"), /too many redirects/);
+  assert.ok(calls <= 7, `calls=${calls}`); // 1 initial + 5 hops + the throw
 });
 
 test("snapshot write failure throws instead of going silently snapshotless", async () => {

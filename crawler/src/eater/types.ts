@@ -22,6 +22,8 @@ export const EATER_USER_AGENT =
 export const EATER_MIN_INTERVAL_MS = 1000;
 export const EATER_FETCH_TIMEOUT_MS = 30_000;
 export const EATER_MAX_RETRIES = 5;
+/** Upper bound on redirect hops followed for a single fetch. */
+export const EATER_MAX_REDIRECTS = 5;
 
 /** Upper bound on /maps index pagination while discovering guides. */
 export const EATER_MAX_INDEX_PAGES = 25;

@@ -103,7 +103,17 @@ function uaToken(ua: string): string {
 export function groupsForAgent(groups: RobotsGroup[], userAgent: string): RobotsGroup[] {
   const token = uaToken(userAgent);
   const specific = groups.filter((g) =>
-    g.agents.some((a) => a !== "*" && (token === a || token.startsWith(a) || a.startsWith(token)))
+    g.agents.some((a) => {
+      if (a === "*") return false;
+      if (token === a) return true;
+      // A shorter group name conventionally names the bot family
+      // ("nycfoodie" covers our "nycfoodie-crawler").
+      if (token.startsWith(a)) return true;
+      // A version-suffixed group ("nycfoodie-crawler/1.0") matches at a "/"
+      // boundary — but a longer unrelated name ("nycfoodie-crawler-bad")
+      // must never match.
+      return a.startsWith(token) && a[token.length] === "/";
+    })
   );
   if (specific.length > 0) return specific;
   return groups.filter((g) => g.agents.includes("*"));

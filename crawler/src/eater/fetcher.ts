@@ -16,6 +16,7 @@ import { join } from "node:path";
 import {
   EATER_FETCH_TIMEOUT_MS,
   EATER_FORBIDDEN_PATH_PREFIXES,
+  EATER_MAX_REDIRECTS,
   EATER_MAX_RETRIES,
   EATER_MIN_INTERVAL_MS,
   EATER_USER_AGENT,
@@ -41,12 +42,30 @@ export interface FetchResult {
   unchanged: boolean;
   /** Path of the snapshot written for this fetch, if any. */
   snapshotPath: string | null;
+  /**
+   * The cache entry this fetch would commit — returned, never written. The
+   * caller persists it via commitCache() only after downstream work (parse +
+   * store) succeeds, so a failed map is refetched rather than 304-skipped
+   * on the next run. Null when there is nothing new to remember.
+   */
+  cacheState: CacheEntry | null;
 }
 
-interface CacheEntry {
+export interface CacheEntry {
   etag: string | null;
   lastModified: string | null;
   sha256: string | null;
+}
+
+/** Per-call options for PoliteFetcher.fetch. */
+export interface FetchCallOptions {
+  /**
+   * Send conditional headers (If-None-Match / If-Modified-Since) from the
+   * cache. Default true. Index/discovery fetches pass false: they always
+   * need the full body, and a 304 on /maps must never yield an empty
+   * discovery result.
+   */
+  conditional?: boolean;
 }
 
 export interface PoliteFetcherOptions {
@@ -165,8 +184,14 @@ export class PoliteFetcher {
   /**
    * Fetch a URL politely. Calls serialise: concurrent callers queue behind
    * each other, each waiting its turn plus the rate-limit interval.
+   *
+   * The fetch cache is read but never written here: the returned
+   * `cacheState` is committed via commitCache() only after the caller has
+   * successfully processed the body. A dry run therefore has no persistent
+   * side effects, and a map whose store failed is refetched — never
+   * 304-skipped — on the next run.
    */
-  async fetch(url: string, snapshotName?: string): Promise<FetchResult> {
+  async fetch(url: string, snapshotName?: string, opts?: FetchCallOptions): Promise<FetchResult> {
     this.assertAllowed(url);
     if (this.urlAllowed && !this.urlAllowed(url)) {
       throw new FetchError(
@@ -175,7 +200,7 @@ export class PoliteFetcher {
         this.urlBlockedMessage ? this.urlBlockedMessage(url) : `refusing to fetch blocked URL ${url}`
       );
     }
-    const run = this.queue.then(() => this.doFetch(url, snapshotName));
+    const run = this.queue.then(() => this.doFetch(url, snapshotName, opts));
     // Keep the chain alive even if this fetch rejects.
     this.queue = run.then(
       () => undefined,
@@ -184,13 +209,59 @@ export class PoliteFetcher {
     return run;
   }
 
-  private async doFetch(url: string, snapshotName?: string): Promise<FetchResult> {
-    const cached = this.cache[url];
+  /**
+   * Persist a fetch result's cache state. Call only after the body has been
+   * fully processed (parsed and stored); never on dry runs, never after a
+   * failure. "Not modified" must always mean "already ingested".
+   */
+  commitCache(url: string, result: FetchResult): void {
+    if (!result.cacheState) return;
+    this.cache[url] = result.cacheState;
+    this.saveCache();
+  }
+
+  private isRedirect(status: number): boolean {
+    return status === 301 || status === 302 || status === 303 || status === 307 || status === 308;
+  }
+
+  /**
+   * Validate a redirect target BEFORE any request goes to it. The target
+   * must stay on the original origin, inside the /maps area, off the
+   * forbidden paths, and allowed by the per-request robots hook.
+   */
+  private assertRedirectAllowed(originalUrl: string, origin: string, target: URL, status: number): void {
+    const p = target.pathname;
+    if (target.origin !== origin) {
+      throw new FetchError(originalUrl, status, `redirect leaves origin: ${target.origin}`);
+    }
+    if (!(p === "/maps" || p.startsWith("/maps/"))) {
+      throw new FetchError(originalUrl, status, `redirect leaves the maps area: ${target.href}`);
+    }
+    this.assertAllowed(target.href);
+    if (this.urlAllowed && !this.urlAllowed(target.href)) {
+      throw new FetchError(
+        originalUrl,
+        status,
+        this.urlBlockedMessage
+          ? this.urlBlockedMessage(target.href)
+          : `refusing to follow redirect to blocked URL ${target.href}`
+      );
+    }
+  }
+
+  private async doFetch(url: string, snapshotName?: string, opts?: FetchCallOptions): Promise<FetchResult> {
+    const conditional = opts?.conditional !== false;
+    const cached = conditional ? this.cache[url] : undefined;
+    // assertAllowed already parsed this URL in fetch(); it cannot fail here.
+    const origin = new URL(url).origin;
+    let currentUrl = url;
+    let redirects = 0;
     let attempt = 0;
     for (;;) {
       attempt++;
-      // The 1 req/s floor applies to every request start, including retries:
-      // a backoff sleep shorter than the floor must not let a retry jump the queue.
+      // The 1 req/s floor applies to every request start, including retries
+      // and redirect hops: a backoff sleep shorter than the floor must not
+      // let a retry jump the queue.
       const wait = this.minIntervalMs - (Date.now() - this.lastStart);
       if (wait > 0) await this.sleepImpl(wait);
       this.lastStart = Date.now();
@@ -202,7 +273,10 @@ export class PoliteFetcher {
         const headers: Record<string, string> = { "User-Agent": this.userAgent };
         if (cached?.etag) headers["If-None-Match"] = cached.etag;
         if (cached?.lastModified) headers["If-Modified-Since"] = cached.lastModified;
-        res = await this.fetchImpl(url, { headers, signal: ctrl.signal });
+        // Manual redirect handling: validate the Location target before any
+        // request goes to it, so an off-origin or forbidden redirect never
+        // receives even one request from us.
+        res = await this.fetchImpl(currentUrl, { headers, redirect: "manual", signal: ctrl.signal });
       } catch (e) {
         clearTimeout(timer);
         if (attempt > this.maxRetries) {
@@ -214,23 +288,31 @@ export class PoliteFetcher {
         clearTimeout(timer);
       }
 
+      if (this.isRedirect(res.status)) {
+        await res.arrayBuffer().catch(() => undefined); // drain before the next hop
+        redirects++;
+        if (redirects > EATER_MAX_REDIRECTS) {
+          throw new FetchError(url, res.status, `too many redirects (>${EATER_MAX_REDIRECTS}) starting at ${url}`);
+        }
+        const location = res.headers.get("location");
+        if (!location) {
+          throw new FetchError(url, res.status, `redirect without a Location header`);
+        }
+        let target: URL;
+        try {
+          target = new URL(location, currentUrl);
+        } catch {
+          throw new FetchError(url, res.status, `redirect to unparseable Location: ${location}`);
+        }
+        this.assertRedirectAllowed(url, origin, target, res.status);
+        currentUrl = target.href;
+        continue;
+      }
       if (res.status === 304) {
-        return { url, status: "not-modified", body: null, unchanged: true, snapshotPath: null };
+        return { url, status: "not-modified", body: null, unchanged: true, snapshotPath: null, cacheState: null };
       }
       if (res.status === 404) {
-        return { url, status: 404, body: null, unchanged: false, snapshotPath: null };
-      }
-      // fetch() follows redirects silently. Refuse to land anywhere outside
-      // the maps area: a redirect to a venue page, login wall, or another
-      // host must never be parsed as a map.
-      if (res.redirected) {
-        const final = new URL(res.url);
-        const orig = new URL(url);
-        const sameOrigin = final.origin === orig.origin;
-        const mapsPath = final.pathname === "/maps" || final.pathname.startsWith("/maps/");
-        if (!sameOrigin || !mapsPath) {
-          throw new FetchError(url, res.status, `redirected to disallowed URL ${res.url}`);
-        }
+        return { url, status: 404, body: null, unchanged: false, snapshotPath: null, cacheState: null };
       }
       if (res.status === 429) {
         if (attempt > this.maxRetries) {
@@ -256,26 +338,25 @@ export class PoliteFetcher {
       const body = await res.text();
       const hash = sha256Hex(body);
       if (cached?.sha256 === hash) {
-        return { url, status: 200, body, unchanged: true, snapshotPath: null };
+        return { url, status: 200, body, unchanged: true, snapshotPath: null, cacheState: null };
       }
       // Snapshot first, cache second: a failed snapshot must not poison the
       // cache into believing this content was already preserved. When a
       // snapshotDir is configured, snapshots are a hard requirement — a
       // write failure throws and the map is counted as failed, never
-      // silently snapshotless.
+      // silently snapshotless. The cache entry itself is only returned, not
+      // written: the caller commits it after parse + store succeed.
       let snapshotPath: string | null = null;
       if (this.snapshotDir && snapshotName) {
         snapshotPath = this.writeSnapshot(snapshotName, body);
       }
-      const entry: CacheEntry = {
+      const cacheState: CacheEntry = {
         etag: res.headers.get("etag"),
         lastModified: res.headers.get("last-modified"),
         sha256: hash,
       };
-      this.cache[url] = entry;
-      this.saveCache();
 
-      return { url, status: 200, body, unchanged: false, snapshotPath };
+      return { url, status: 200, body, unchanged: false, snapshotPath, cacheState };
     }
   }
 

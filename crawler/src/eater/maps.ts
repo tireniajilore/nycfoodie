@@ -9,7 +9,7 @@ import { EATER_BASE_URL, EATER_MAX_INDEX_PAGES } from "./types.js";
 
 /** Minimal surface discoverMaps needs — lets tests inject a stub. */
 export interface MapPageSource {
-  fetch(url: string, label: string): Promise<FetchResult>;
+  fetch(url: string, label: string, opts?: { conditional?: boolean }): Promise<FetchResult>;
 }
 
 export interface MapIndex {
@@ -80,7 +80,9 @@ export async function discoverMaps(
   while (pageUrl && pages < maxPages && !visitedPages.has(pageUrl)) {
     visitedPages.add(pageUrl);
     pages++;
-    const res = await fetcher.fetch(pageUrl, `index-page-${pages}`);
+    // Index pages are always fetched unconditionally: a 304 here would yield
+    // an empty discovery result on a warm cache, silently crawling nothing.
+    const res = await fetcher.fetch(pageUrl, `index-page-${pages}`, { conditional: false });
     if (res.status === 404 || res.body === null) break;
     const { mapUrls, nextPageUrl } = parseMapIndex(res.body, pageUrl);
     for (const u of mapUrls) {

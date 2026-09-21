@@ -11,7 +11,7 @@ import { closeDb } from "nycfoodie-db";
 import { ensureCity } from "../store.js";
 import { discoverMaps } from "./maps.js";
 import { EaterParseError, parseMapPage } from "./parse.js";
-import { FetchError, PoliteFetcher } from "./fetcher.js";
+import { FetchError, PoliteFetcher, type FetchResult } from "./fetcher.js";
 import {
   fetchRobotsTxt,
   groupsForAgent,
@@ -110,31 +110,30 @@ export async function crawlEaterMaps(opts: CrawlEaterMapsOptions = {}): Promise<
   try {
     for (const url of mapUrls) {
       const slug = mapSlugFromUrl(url);
-      let body: string;
+      let result: FetchResult;
       try {
-        const res = await fetcher.fetch(url, slug);
-        if (res.status === 404) {
-          console.log(`  ✗ ${slug}: gone (HTTP 404)`);
-          stats.mapsFailed++;
-          continue;
-        }
-        if (res.status === "not-modified" || res.unchanged || res.body === null) {
-          console.log(`  = ${slug}: not modified, skipping`);
-          stats.mapsNotModified++;
-          continue;
-        }
-        body = res.body;
-        stats.mapsFetched++;
+        result = await fetcher.fetch(url, slug);
       } catch (e) {
         const reason = e instanceof FetchError ? `${e.message}` : (e as Error).message;
         console.log(`  ✗ ${slug}: fetch failed: ${reason}`);
         stats.mapsFailed++;
         continue;
       }
+      if (result.status === 404) {
+        console.log(`  ✗ ${slug}: gone (HTTP 404)`);
+        stats.mapsFailed++;
+        continue;
+      }
+      if (result.status === "not-modified" || result.unchanged || result.body === null) {
+        console.log(`  = ${slug}: not modified, skipping`);
+        stats.mapsNotModified++;
+        continue;
+      }
+      stats.mapsFetched++;
 
       let page;
       try {
-        page = parseMapPage(body, url);
+        page = parseMapPage(result.body, url);
       } catch (e) {
         const reason = e instanceof EaterParseError ? e.message : (e as Error).message;
         console.log(`  ✗ ${slug}: parse failed: ${reason}`);
@@ -154,6 +153,11 @@ export async function crawlEaterMaps(opts: CrawlEaterMapsOptions = {}): Promise<
           linker = new VenueLinker(city);
           continue;
         }
+        // Commit the fetch cache only after the store succeeded: a map that
+        // failed to store must be refetched — never 304-skipped — on the
+        // next run. Dry runs never commit, so a dry run can never poison a
+        // later --write run's change detection.
+        fetcher.commitCache(url, result);
         console.log(`  ✓ ${slug}: "${page.title}" — ${page.entries.length} entries`);
       } else {
         stats.entries += page.entries.length;
