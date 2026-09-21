@@ -76,7 +76,8 @@ async function withHttpServer(dbPath, fn) {
       await fn(port);
       return;
     } catch (e) {
-      if (/EADDRINUSE/.test(stderr) && attempt < 4) continue;
+      const collision = /EADDRINUSE/.test(stderr) || /EADDRINUSE/.test(e.message);
+      if (collision && attempt < 4) continue;
       throw e;
     } finally {
       await killAndWait(child);
@@ -92,8 +93,21 @@ function waitForPort(port, child) {
       if (child.exitCode != null) return reject(new Error("server exited early"));
       try {
         const res = await fetch(`http://127.0.0.1:${port}/healthz`);
-        if (res.ok) return resolve();
-      } catch { /* not up yet */ }
+        if (res.ok) {
+          // A 200 alone isn't proof it's OUR server: another local process
+          // could own this port while our child died with EADDRINUSE a
+          // moment later than this check. Give a doomed child a grace
+          // period to exit; if it's dead, this 200 came from someone else.
+          await new Promise((r) => setTimeout(r, 500));
+          if (child.exitCode != null || child.signalCode != null) {
+            return reject(new Error("EADDRINUSE: port answered but server child exited"));
+          }
+          return resolve();
+        }
+      } catch (e) {
+        if (/EADDRINUSE/.test(e.message)) return reject(e);
+        /* not up yet */
+      }
       if (Date.now() - t0 > 30000) return reject(new Error("server did not start in time"));
       setTimeout(tick, 250);
     };
