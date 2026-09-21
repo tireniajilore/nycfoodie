@@ -55,6 +55,34 @@ function pickFixtures(dbPath) {
          AND ${OPEN}
        ORDER BY r.name LIMIT 1`
     );
+    // Eater-only venue with MULTIPLE eater listings where a cuisine tag sits on
+    // a non-primary listing: the cuisine filter is primary-listing scoped, so
+    // without primary-listing coverage this venue would be tagged yet
+    // invisible to the filter. Picks the rarest cuisine label so the
+    // limit-bounded search is a meaningful assertion.
+    const eaterMulti = one(
+      `SELECT r.name AS name, t.label AS cuisine FROM restaurants r
+       JOIN source_listings sl ON sl.restaurant_id = r.id AND sl.source_slug = 'eater'
+       JOIN listing_tags lt ON lt.source_listing_id = sl.id
+       JOIN tags t ON t.id = lt.tag_id
+       WHERE lt.assigned_by = 'guide-theme-map:v1' AND t.kind = 'cuisine' AND ${OPEN}
+         AND NOT EXISTS (SELECT 1 FROM source_listings s2 WHERE s2.restaurant_id = r.id AND s2.source_slug <> 'eater')
+         AND (SELECT COUNT(*) FROM source_listings s3 WHERE s3.restaurant_id = r.id AND s3.source_slug = 'eater') > 1
+         AND sl.id <> (
+           SELECT sl4.id FROM source_listings sl4
+           JOIN restaurants r4 ON r4.id = sl4.restaurant_id
+           LEFT JOIN reviews rv4 ON rv4.source_listing_id = sl4.id
+           WHERE sl4.restaurant_id = r.id AND sl4.source_slug = 'eater'
+           ORDER BY (rv4.id IS NOT NULL) DESC, sl4.rating DESC, (sl4.name = r4.name) DESC
+           LIMIT 1
+         )
+       ORDER BY (SELECT COUNT(DISTINCT slx.restaurant_id)
+                 FROM listing_tags ltx
+                 JOIN tags tx ON tx.id = ltx.tag_id
+                 JOIN source_listings slx ON slx.id = ltx.source_listing_id
+                 WHERE tx.kind = 'cuisine' AND tx.label = t.label) ASC,
+                r.name LIMIT 1`
+    );
     // Cross-source venue (infatuation + eater) with eater guide blurbs.
     const crossSource = one(
       `SELECT r.name AS name FROM restaurants r
@@ -73,7 +101,7 @@ function pickFixtures(dbPath) {
          AND NOT EXISTS (SELECT 1 FROM source_listings sl WHERE sl.restaurant_id = r.id AND sl.source_slug = 'eater')
        ORDER BY r.name LIMIT 1`
     );
-    return { eaterOnly, eaterHood, crossSource, infatuationOnly };
+    return { eaterOnly, eaterHood, eaterMulti, crossSource, infatuationOnly };
   } finally {
     db.close();
   }
@@ -90,6 +118,7 @@ async function withServer(fn) {
   const fx = pickFixtures(db);
   assert.ok(fx.eaterOnly, "fixture: eater-only venue with a cuisine tag");
   assert.ok(fx.eaterHood, "fixture: eater-only venue with a neighbourhood tag");
+  assert.ok(fx.eaterMulti, "fixture: multi-listing eater-only venue with a cuisine tag on a non-primary listing");
   assert.ok(fx.crossSource, "fixture: cross-source venue with eater blurbs");
   assert.ok(fx.infatuationOnly, "fixture: infatuation-only venue");
   const child = spawn("node", [join(root, "dist", "index.js")], {
@@ -204,6 +233,25 @@ await test("eater enrichment read path", async (t) => {
       );
       const names = p.map((c) => c.name);
       assert.ok(names.includes(fx.eaterOnly.name), `cuisine='${fx.eaterOnly.cuisine}' includes ${fx.eaterOnly.name}`);
+    });
+
+    await t.test("cuisine filter finds a multi-listing venue via its primary listing tag", async () => {
+      // Regression: the cuisine filter is primary-listing scoped, so a venue
+      // whose mapped-guide listing is not its primary must still be found
+      // through the primary-listing tag the backfill writes.
+      const p = JSON.parse(
+        toolText(
+          await rpc("tools/call", {
+            name: "search_restaurants",
+            arguments: { cuisine: fx.eaterMulti.cuisine, city: "new-york", limit: 50 },
+          })
+        )
+      );
+      const names = p.map((c) => c.name);
+      assert.ok(
+        names.includes(fx.eaterMulti.name),
+        `cuisine='${fx.eaterMulti.cuisine}' includes ${fx.eaterMulti.name}`
+      );
     });
 
     await t.test("neighbourhood filter finds the eater-only venue through its eater tag", async () => {

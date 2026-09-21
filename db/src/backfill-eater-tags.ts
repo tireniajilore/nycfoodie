@@ -18,6 +18,11 @@
 // - Never writes, modifies or deletes infatuation-scoped tags (asserted).
 // - No rating, price_tier or occasion tag is created for any venue (asserted
 //   in-script, inside the write transaction: a failure rolls everything back).
+// - Cuisine tags are also written to the venue's primary Eater listing: the
+//   cuisine filter and search-card cuisines are primary-listing scoped, so
+//   without this a multi-listing venue could be tagged yet invisible to
+//   cuisine filters. The tag stays venue-true (the venue is in the mapped
+//   guide); the listing row is the join vehicle.
 // - If Eater listings with no restaurant link exceed 5% of all Eater listings,
 //   the run aborts before any write instead of guessing.
 // - Idempotent: re-running inserts nothing new; first-write timestamps kept.
@@ -242,6 +247,58 @@ export function runBackfill(dbPath: string, mode: "dry-run" | "write"): Backfill
       for (const row of entriesStmt.all(guideId) as Array<{ listing_id: string; restaurant_id: string }>) {
         if (row.restaurant_id && eaterOnlySet.has(row.restaurant_id)) {
           plans.push({ listingId: row.listing_id, restaurantId: row.restaurant_id, kind: "cuisine", label, slug, rule: CUISINE_RULE });
+        }
+      }
+    }
+
+    // Primary-listing coverage: the cuisine filter (and the search-card
+    // cuisines) are primary-listing scoped, so a venue whose only tagged
+    // listing is not its primary would be tagged yet invisible to cuisine
+    // filters. Tag the primary Eater listing as well so every cuisine-tagged
+    // venue is filter-visible. The tag stays venue-true — the venue appears
+    // in the mapped guide; the listing row is the join vehicle. Ordering
+    // replicates PRIMARY_LISTINGS_CTE in mcp/src/queries.ts (restricted to
+    // eater-only venues, so the infatuation-first term is constant and
+    // omitted).
+    const primaryByRestaurant = new Map<string, string>();
+    for (const row of db
+      .prepare(
+        `SELECT restaurant_id, id FROM (
+           SELECT sl.restaurant_id AS restaurant_id, sl.id AS id,
+             ROW_NUMBER() OVER (
+               PARTITION BY sl.restaurant_id
+               ORDER BY (rv.id IS NOT NULL) DESC,
+                        sl.rating DESC,
+                        (sl.name = r2.name) DESC
+             ) AS rn
+           FROM source_listings sl
+           JOIN restaurants r2 ON r2.id = sl.restaurant_id
+           LEFT JOIN reviews rv ON rv.source_listing_id = sl.id
+           WHERE sl.source_slug = 'eater'
+         ) WHERE rn = 1`
+      )
+      .all() as Array<{ restaurant_id: string; id: string }>) {
+      primaryByRestaurant.set(row.restaurant_id, row.id);
+    }
+    const cuisineByRestaurant = new Map<string, Map<string, { label: string; slug: string }>>();
+    for (const p of plans) {
+      if (p.kind !== "cuisine") continue;
+      let m = cuisineByRestaurant.get(p.restaurantId);
+      if (!m) {
+        m = new Map();
+        cuisineByRestaurant.set(p.restaurantId, m);
+      }
+      m.set(p.slug, { label: p.label, slug: p.slug });
+    }
+    const plannedKeys = new Set(plans.map((p) => `${p.restaurantId}:${p.listingId}:${p.slug}`));
+    for (const [restaurantId, tags] of cuisineByRestaurant) {
+      const prim = primaryByRestaurant.get(restaurantId);
+      if (!prim) continue;
+      for (const { label, slug } of tags.values()) {
+        const key = `${restaurantId}:${prim}:${slug}`;
+        if (!plannedKeys.has(key)) {
+          plans.push({ listingId: prim, restaurantId, kind: "cuisine", label, slug, rule: CUISINE_RULE });
+          plannedKeys.add(key);
         }
       }
     }

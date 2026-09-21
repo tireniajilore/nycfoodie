@@ -175,6 +175,61 @@ test("negative controls hold and infatuation tags are untouched", () => {
   }
 });
 
+test("primary-listing coverage: every cuisine-tagged venue's primary listing carries the tag", () => {
+  // The cuisine filter and search-card cuisines are primary-listing scoped.
+  // A venue tagged only on a non-primary listing would be tagged yet
+  // invisible to cuisine filters — the backfill must tag the primary too.
+  const { dir, db } = scratchDb();
+  try {
+    migrate(db);
+    closeDb();
+    runBackfill(db, "write");
+    const probe = new Database(db, { readonly: true });
+    try {
+      const missing = probe
+        .prepare(
+          `WITH prim AS (
+             SELECT restaurant_id, id AS prim_id FROM (
+               SELECT sl.restaurant_id, sl.id,
+                 ROW_NUMBER() OVER (
+                   PARTITION BY sl.restaurant_id
+                   ORDER BY (rv.id IS NOT NULL) DESC,
+                            sl.rating DESC,
+                            (sl.name = r.name) DESC
+                 ) AS rn
+               FROM source_listings sl
+               JOIN restaurants r ON r.id = sl.restaurant_id
+               LEFT JOIN reviews rv ON rv.source_listing_id = sl.id
+               WHERE sl.source_slug = 'eater'
+             ) WHERE rn = 1
+           )
+           SELECT COUNT(DISTINCT r.id) AS n
+           FROM restaurants r
+           JOIN prim p ON p.restaurant_id = r.id
+           WHERE EXISTS (
+             SELECT 1 FROM source_listings sl
+             JOIN listing_tags lt ON lt.source_listing_id = sl.id
+             JOIN tags t ON t.id = lt.tag_id
+             WHERE sl.restaurant_id = r.id AND sl.source_slug = 'eater'
+               AND lt.assigned_by = 'guide-theme-map:v1' AND t.kind = 'cuisine'
+           )
+           AND NOT EXISTS (
+             SELECT 1 FROM listing_tags lt
+             JOIN tags t ON t.id = lt.tag_id
+             WHERE lt.source_listing_id = p.prim_id
+               AND lt.assigned_by = 'guide-theme-map:v1' AND t.kind = 'cuisine'
+           )`
+        )
+        .get().n;
+      assert.equal(missing, 0, "every cuisine-tagged venue has the tag on its primary listing");
+    } finally {
+      probe.close();
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("reversibility: deleting by assigned_by prefix removes the backfill", () => {
   const { dir, db } = scratchDb();
   try {
