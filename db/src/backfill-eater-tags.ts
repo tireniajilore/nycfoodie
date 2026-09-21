@@ -306,9 +306,13 @@ export function runBackfill(dbPath: string, mode: "dry-run" | "write"): Backfill
     // Neighbourhood: 1:1 locality → canonical label matches on eater listings
     // of eater-only restaurants. Locality is the listing's own address field;
     // guide themes are never used for neighbourhoods.
+    // The canonical neighbourhood vocabulary is infatuation-scoped. Restrict
+    // the lookup to it: eater-scoped rows created by this backfill must never
+    // feed the vocabulary, or a rerun could read an 'eater-*' slug as
+    // canonical and ensureTag() would mint 'eater-eater-*' duplicates.
     const neighbourhoodLabels = new Map<string, { label: string; slug: string }>(); // lower -> row
     for (const row of db
-      .prepare("SELECT DISTINCT label, slug FROM tags WHERE kind = 'neighborhood'")
+      .prepare("SELECT DISTINCT label, slug FROM tags WHERE kind = 'neighborhood' AND source_slug = 'infatuation'")
       .all() as Array<{ label: string; slug: string }>) {
       if (!neighbourhoodLabels.has(row.label.toLowerCase())) {
         neighbourhoodLabels.set(row.label.toLowerCase(), { label: row.label, slug: row.slug });
@@ -348,18 +352,21 @@ export function runBackfill(dbPath: string, mode: "dry-run" | "write"): Backfill
     const ensureTag = (kind: string, label: string, slug: string): string => {
       // tags has UNIQUE(city_slug, kind, slug) across sources, so eater-scoped
       // rows take an 'eater-' slug prefix. Labels are unchanged, and every
-      // read path matches on kind + label, never slug.
+      // read path matches on kind + label, never slug. The cache is keyed by
+      // kind + slug because uniqueness (and findTag) is per (city, kind, slug):
+      // a cuisine and a neighbourhood must never share a tag row.
       const eslug = `eater-${slug}`;
-      const cached = tagIdCache.get(eslug);
+      const cacheKey = `${kind}:${eslug}`;
+      const cached = tagIdCache.get(cacheKey);
       if (cached) return cached;
       const existing = findTag.get(CITY, kind, eslug) as { id: string } | undefined;
       if (existing) {
-        tagIdCache.set(eslug, existing.id);
+        tagIdCache.set(cacheKey, existing.id);
         return existing.id;
       }
       const id = randomUUID();
       insertTag.run(id, CITY, kind, eslug, label, "eater");
-      tagIdCache.set(eslug, id);
+      tagIdCache.set(cacheKey, id);
       return id;
     };
 

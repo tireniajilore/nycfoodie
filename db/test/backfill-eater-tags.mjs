@@ -59,9 +59,11 @@ test("migration 015 applies cleanly and adds provenance columns", () => {
     assert.ok(cols.includes("assigned_by"), "assigned_by column present");
     assert.ok(cols.includes("assigned_at"), "assigned_at column present");
     // Pre-existing rows keep NULL provenance.
-    const nulls = new Database(db, { readonly: true })
+    const nullProbe = new Database(db, { readonly: true });
+    const nulls = nullProbe
       .prepare("SELECT COUNT(*) AS n FROM listing_tags WHERE assigned_by IS NULL")
       .get().n;
+    nullProbe.close();
     assert.ok(nulls > 0, "existing rows keep NULL provenance");
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -126,6 +128,58 @@ test("write run is idempotent: two runs, identical result", () => {
       );
     }
     probe2.close();
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("eater-scoped rows never feed the neighbourhood vocabulary", () => {
+  // Regression: the vocabulary lookup once read every neighbourhood tag row,
+  // so an eater-scoped 'eater-*' slug could be mistaken for the canonical
+  // slug and ensureTag() would mint 'eater-eater-*' duplicates. The failure
+  // was order-dependent (whichever row SQLite returned first won the Map),
+  // so simulate the eater row winning by removing the infatuation canonical
+  // row for one label - then the eater row is the only vocabulary candidate
+  // and the old code deterministically double-prefixes.
+  const { dir, db } = scratchDb();
+  try {
+    migrate(db);
+    closeDb();
+    const rw = new Database(db);
+    // A label the backfill would genuinely tag: an eater-only listing whose
+    // locality matches a canonical infatuation neighbourhood label.
+    const seed = rw
+      .prepare(
+        `SELECT t.label AS label, t.slug AS slug
+         FROM source_listings sl
+         JOIN tags t ON t.kind = 'neighborhood' AND t.source_slug = 'infatuation'
+           AND lower(t.label) = lower(trim(sl.locality))
+         WHERE sl.source_slug = 'eater' AND sl.locality IS NOT NULL
+           AND NOT EXISTS (SELECT 1 FROM source_listings s2
+                           WHERE s2.restaurant_id = sl.restaurant_id AND s2.source_slug <> 'eater')
+         LIMIT 1`
+      )
+      .get();
+    assert.ok(seed, "seed fixture: eater-only listing with a canonical locality");
+    // Seed a prior-run-shaped eater tag row for the label...
+    rw.prepare(
+      "INSERT INTO tags (id, city_slug, kind, slug, label, source_slug) VALUES ('00000000-0000-4000-8000-000000000001', 'new-york', 'neighborhood', ?, ?, 'eater')"
+    ).run(`eater-${seed.slug}`, seed.label);
+    // ...and remove the infatuation canonical row, so the eater row is the only
+    // vocabulary candidate - the adversarial condition the old code mishandled.
+    rw.prepare(
+      "DELETE FROM tags WHERE kind = 'neighborhood' AND source_slug = 'infatuation' AND label = ?"
+    ).run(seed.label);
+    rw.close();
+    runBackfill(db, "write");
+    const probe = new Database(db, { readonly: true });
+    try {
+      const doublePrefixed = probe.prepare("SELECT COUNT(*) AS n FROM tags WHERE slug LIKE 'eater-eater-%'").get()
+        .n;
+      assert.equal(doublePrefixed, 0, "no eater-eater-* slugs created");
+    } finally {
+      probe.close();
+    }
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
