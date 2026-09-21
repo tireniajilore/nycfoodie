@@ -4,6 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -158,6 +159,34 @@ test("unmatched-listing guard aborts the write before changing anything", () => 
     const before = counts(db);
     assert.throws(() => runBackfill(db, "write"), /backfill aborted/, "aborts over the 5% threshold");
     assert.deepEqual(counts(db), before, "aborted run changes nothing");
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("CLI rejects conflicting or unknown flags without touching the DB", () => {
+  // Regression: the entrypoint once resolved `--dry-run --write` to a write.
+  // Conflicting mode flags and unknown flags must abort before runBackfill.
+  const { dir, db } = scratchDb();
+  try {
+    migrate(db);
+    closeDb();
+    const before = counts(db);
+    const script = join(root, "dist", "backfill-eater-tags.js");
+    for (const args of [
+      ["--dry-run", "--write", db],
+      ["--write", "--dry-run", db],
+      ["--bogus", db],
+    ]) {
+      let failed = false;
+      try {
+        execFileSync(process.execPath, [script, ...args], { stdio: "pipe" });
+      } catch {
+        failed = true;
+      }
+      assert.ok(failed, `CLI aborts for: ${args.join(" ")}`);
+    }
+    assert.deepEqual(counts(db), before, "aborted CLI invocations change nothing");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

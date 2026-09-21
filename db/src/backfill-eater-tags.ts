@@ -491,9 +491,16 @@ const isMain =
 
 if (isMain) {
   const args = process.argv.slice(2);
-  const mode: "dry-run" | "write" = args.includes("--write") ? "write" : "dry-run";
-  const dbPath = args.find((a) => !a.startsWith("--")) ?? join(process.cwd(), "nycfoodie.db");
+  const flags = args.filter((a) => a.startsWith("--"));
+  const unknown = flags.filter((f) => f !== "--dry-run" && f !== "--write");
+  const usage = "usage: node dist/backfill-eater-tags.js [--dry-run|--write] [db-path]";
   try {
+    if (unknown.length > 0) throw new Error(`${usage}\nunknown flag(s): ${unknown.join(", ")}`);
+    if (flags.includes("--dry-run") && flags.includes("--write")) {
+      throw new Error(`${usage}\n--dry-run and --write are mutually exclusive`);
+    }
+    const mode: "dry-run" | "write" = flags.includes("--write") ? "write" : "dry-run";
+    const dbPath = args.find((a) => !a.startsWith("--")) ?? join(process.cwd(), "nycfoodie.db");
     const report = runBackfill(dbPath, mode);
     printReport(report);
   } catch (err) {
