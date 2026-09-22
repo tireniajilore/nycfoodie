@@ -157,8 +157,10 @@ export function canonicalName(name: string): string {
   return name.replace(/[’‘`´]/g, "'").replace(/[“”]/g, '"').trim();
 }
 
-/** Match-or-create the canonical restaurant row. MVP rule: same city + normalised name. */
-function matchOrCreateRestaurant(
+/** Match-or-create the canonical restaurant row. MVP rule: same city + normalised name.
+ * Exported for the Eater crawler (crawler/src/eater/store.ts), which reuses
+ * the canonical insert but applies its own variant-tolerant matching first. */
+export function matchOrCreateRestaurant(
   citySlug: string,
   name: string,
   addr: {
