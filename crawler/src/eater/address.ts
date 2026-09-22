@@ -79,8 +79,9 @@ interface TailParse {
 function parseTail(parts: string[]): TailParse | null {
   const last = parts[parts.length - 1];
 
-  // "NY 10023" — state code + ZIP in one segment.
-  let m = /^([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/.exec(last);
+  // "NY 10023" — state code + ZIP in one segment. Case-insensitive like the
+  // split-state and bare-state branches below; the code is normalised above.
+  let m = /^([A-Z]{2})\s+(\d{5}(?:-\d{4})?)$/i.exec(last);
   if (m && US_STATE_CODES.has(m[1].toUpperCase())) {
     return { head: parts.slice(0, -1), region: m[1].toUpperCase(), postal: m[2] };
   }

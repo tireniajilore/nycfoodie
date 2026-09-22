@@ -21,6 +21,15 @@ test("state-code + ZIP form", () => {
   });
 });
 
+test("lowercase state code + ZIP is accepted like the other branches", () => {
+  assert.deepEqual(parseAddress("2135 Broadway, New York, ny 10023"), {
+    address_line1: "2135 Broadway",
+    locality: "New York",
+    region: "NY",
+    postal_code: "10023",
+  });
+});
+
 test("ZIP split from state by a comma", () => {
   assert.deepEqual(parseAddress("123 E 149th St, Bronx, NY, 10455"), {
     address_line1: "123 E 149th St",

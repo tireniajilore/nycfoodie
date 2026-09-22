@@ -2,6 +2,7 @@
 // PR comment. Runs on pull_request events. Requires the OPENAI_API_KEY repo
 // secret; exits quietly (green) when it is not configured yet.
 import { readFileSync } from "node:fs";
+import { buildSignalBody } from "./ai-review-signal.mjs";
 
 const MARKER = "<!-- ai-pr-review -->";
 const MAX_DIFF_CHARS = 50000;
@@ -137,22 +138,32 @@ if (existing) {
 
 // 5. Post a short per-run signal comment. The full review above is edited in
 // place, which produces no thread event — without this, a new verdict on a
-// new push is invisible and nobody knows the review landed. One comment per
-// run is the visible "the review is in" signal; it links the full review.
+// new push is invisible and nobody knows the review landed. The signal embeds
+// this run's verdict and review verbatim: the linked full-review comment
+// always shows the latest run, so a bare link would go stale and mislead.
 const verdictLine =
   review
     .split("\n")
     .map((l) => l.trim())
     .find((l) => l.length > 0)
     ?.slice(0, 200) ?? "review posted";
+const signalBody = buildSignalBody({
+  sha: headSha,
+  verdictLine,
+  review,
+  // The gh helper above throws on any non-OK response, so reaching this line
+  // already confirms the full-review comment was created/updated; the builder
+  // additionally fails closed on an invalid id rather than posting a broken
+  // "#issuecomment-undefined" anchor.
+  reviewCommentId,
+  owner,
+  repo,
+  prNumber,
+  runAt: new Date().toISOString(),
+});
 await gh(`/repos/${owner}/${repo}/issues/${prNumber}/comments`, {
   method: "POST",
   headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({
-    body:
-      `<!-- ai-pr-review-signal -->\n` +
-      `🤖 AI review for \`${headSha}\`: ${verdictLine}\n\n` +
-      `[Full review](https://github.com/${owner}/${repo}/pull/${prNumber}#issuecomment-${reviewCommentId})`,
-  }),
+  body: JSON.stringify({ body: signalBody }),
 });
 console.log(`Posted review signal for ${headSha}.`);
