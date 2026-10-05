@@ -201,11 +201,9 @@ const GLAMA_JSON = JSON.stringify({
 // Legal pages: Privacy Policy and Terms of Service, required for connector
 // directory submissions. Server-rendered, no JS, same visual style as the
 // landing page. Copy: docs/privacy-draft.md and docs/terms-draft.md — keep
-// the substance identical; the DRAFT banner comes off only after the
-// operator has reviewed the copy.
+// the substance identical to the reviewed drafts.
 const LEGAL_CONTACT_EMAIL = "tireniajilore1@gmail.com";
-// Effective date is set to the deploy date just before merging.
-const LEGAL_EFFECTIVE_DATE = "[to be set on publish]";
+const LEGAL_EFFECTIVE_DATE = "2026-10-04";
 
 const LEGAL_STYLE = `body { font-family: system-ui, -apple-system, sans-serif; max-width: 680px; margin: 3rem auto; padding: 0 1.5rem; line-height: 1.6; color: #1a1a1a; }
   code { background: #f3f3f3; padding: 0.15em 0.4em; border-radius: 4px; font-size: 0.9em; }
@@ -213,7 +211,6 @@ const LEGAL_STYLE = `body { font-family: system-ui, -apple-system, sans-serif; m
   h2 { font-size: 1.2rem; margin-top: 2rem; }
   ul { padding-left: 1.4rem; } li { margin-bottom: 0.4rem; }
   .meta { color: #555; }
-  .draft { background: #fff8e1; border: 1px solid #f0d060; border-radius: 8px; padding: 0.8rem 1rem; margin: 1.5rem 0; font-size: 0.9rem; }
   footer { margin-top: 2.5rem; color: #888; font-size: 0.85rem; }
   footer a { color: #888; }`;
 
@@ -227,7 +224,6 @@ const PRIVACY_HTML = `<!doctype html>
 </head>
 <body>
 <h1>Privacy Policy — NYCfoodie</h1>
-<div class="draft"><strong>Status:</strong> draft prepared 2026-10-04. Not yet published. This is not legal advice — please review before publishing, especially the data-provenance note.</div>
 <p class="meta"><strong>Effective date:</strong> ${LEGAL_EFFECTIVE_DATE}<br><strong>Contact:</strong> ${LEGAL_CONTACT_EMAIL}</p>
 <p>NYCfoodie is a free, public MCP (Model Context Protocol) server that gives AI agents structured editorial restaurant recommendations for New York City. There are no user accounts, no sign-up, no cookies, and we do not ask for any personal information.</p>
 <h2>What we collect</h2>
@@ -278,7 +274,6 @@ const TERMS_HTML = `<!doctype html>
 </head>
 <body>
 <h1>Terms of Service — NYCfoodie</h1>
-<div class="draft"><strong>Status:</strong> draft prepared 2026-10-04. Not yet published. This is not legal advice — please review before publishing.</div>
 <p class="meta"><strong>Effective date:</strong> ${LEGAL_EFFECTIVE_DATE}<br><strong>Contact:</strong> ${LEGAL_CONTACT_EMAIL}</p>
 <h2>1. The service</h2>
 <p>NYCfoodie is a free, public MCP (Model Context Protocol) server providing structured editorial restaurant recommendations for New York City. It is a personal project, provided as-is, with no guarantee of availability, accuracy, or continuity. The operator may modify, rate-limit, suspend, or discontinue the service at any time without notice.</p>
