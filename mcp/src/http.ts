@@ -149,7 +149,7 @@ const LANDING_HTML = `<!doctype html>
 </ul>
 <h2>Data</h2>
 <p>5,767 NYC venues · 1,841 numeric ratings · 1,837 full editorial reviews · 929 ranked guides · 381 tags, sourced from professional editorial coverage.</p>
-<footer>NYCfoodie is a free public MCP server. Endpoint <code>POST /mcp</code> · health <code>GET /healthz</code></footer>
+<footer>NYCfoodie is a free public MCP server. Endpoint <code>POST /mcp</code> · health <code>GET /healthz</code> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></footer>
 </body>
 </html>`;
 
@@ -197,6 +197,112 @@ const GLAMA_JSON = JSON.stringify({
   $schema: "https://glama.ai/mcp/schemas/connector.json",
   claim: "glama_claim_4pzowXEakxm1R2Vveqtx2Fmfhcow5q6e",
 });
+
+// Legal pages: Privacy Policy and Terms of Service, required for connector
+// directory submissions. Server-rendered, no JS, same visual style as the
+// landing page. Copy: docs/privacy-draft.md and docs/terms-draft.md — keep
+// the substance identical; the DRAFT banner comes off only after the
+// operator has reviewed the copy.
+const LEGAL_CONTACT_EMAIL = "tireniajilore1@gmail.com";
+// Effective date is set to the deploy date just before merging.
+const LEGAL_EFFECTIVE_DATE = "[to be set on publish]";
+
+const LEGAL_STYLE = `body { font-family: system-ui, -apple-system, sans-serif; max-width: 680px; margin: 3rem auto; padding: 0 1.5rem; line-height: 1.6; color: #1a1a1a; }
+  code { background: #f3f3f3; padding: 0.15em 0.4em; border-radius: 4px; font-size: 0.9em; }
+  h1 { font-size: 1.8rem; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.2rem; margin-top: 2rem; }
+  ul { padding-left: 1.4rem; } li { margin-bottom: 0.4rem; }
+  .meta { color: #555; }
+  .draft { background: #fff8e1; border: 1px solid #f0d060; border-radius: 8px; padding: 0.8rem 1rem; margin: 1.5rem 0; font-size: 0.9rem; }
+  footer { margin-top: 2.5rem; color: #888; font-size: 0.85rem; }
+  footer a { color: #888; }`;
+
+const PRIVACY_HTML = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Privacy Policy — NYCfoodie</title>
+<style>${LEGAL_STYLE}</style>
+</head>
+<body>
+<h1>Privacy Policy — NYCfoodie</h1>
+<div class="draft"><strong>Status:</strong> draft prepared 2026-10-04. Not yet published. This is not legal advice — please review before publishing, especially the data-provenance note.</div>
+<p class="meta"><strong>Effective date:</strong> ${LEGAL_EFFECTIVE_DATE}<br><strong>Contact:</strong> ${LEGAL_CONTACT_EMAIL}</p>
+<p>NYCfoodie is a free, public MCP (Model Context Protocol) server that gives AI agents structured editorial restaurant recommendations for New York City. There are no user accounts, no sign-up, no cookies, and we do not ask for any personal information.</p>
+<h2>What we collect</h2>
+<p><strong>1. Anonymous usage analytics</strong> — stored in a database table, automatically deleted after 180 days:</p>
+<ul>
+<li>timestamp of the call</li>
+<li>tool name (e.g. <code>search_restaurants</code>)</li>
+<li>coarse city parameter passed to the tool</li>
+<li>request latency and whether it succeeded</li>
+<li>a 16-character truncated SHA-256 hash of your IP address plus user-agent string. This lets us count distinct clients without storing IPs — the hash cannot be reversed into an IP address or device.</li>
+<li>the connecting client's self-reported software name and version (from the MCP handshake), and a reduced user-agent string with platform details stripped (e.g. <code>Mozilla/5.0</code> without OS/version detail).</li>
+</ul>
+<p>This analytics data contains <strong>no query text and no raw IP addresses</strong>.</p>
+<p><strong>2. Operational server logs</strong> — one line per tool call, kept on the server:</p>
+<ul>
+<li>tool name, the arguments sent to the tool, duration, success or error, and result size.</li>
+</ul>
+<p>These logs exist for debugging, reliability monitoring and abuse prevention. They are not shared, not sold, and not exposed through any public endpoint. Unlike the analytics above, they do include the parameters your agent sent (e.g. a cuisine or neighbourhood search) — but they never include anything beyond what your agent itself transmitted to the server.</p>
+<p><strong>3. Feedback you choose to send</strong> — if your agent calls <code>submit_feedback</code>:</p>
+<ul>
+<li>the tool name, a 1–5 rating, and the comment text your agent wrote.</li>
+</ul>
+<p>Feedback is voluntary, stored indefinitely so we can improve the service, and never linked to an identity — we have no accounts to link it to.</p>
+<h2>What we do not do</h2>
+<ul>
+<li>No raw IP addresses are stored.</li>
+<li>No personal data is requested or required.</li>
+<li>Data is not sold, rented, or shared with third parties.</li>
+<li>The admin analytics endpoints are protected and visible only to the operator.</li>
+</ul>
+<h2>Data provenance note (for transparency)</h2>
+<p>NYCfoodie's restaurant data is derived from The Infatuation's published restaurant guides, transformed into structured data (ratings, tags, booking intel). Data licensing is currently unresolved — see the project repository.</p>
+<h2>Hosting</h2>
+<p>The service runs on Railway (United States). Standard server infrastructure (Railway) may process requests in the course of hosting.</p>
+<h2>Changes</h2>
+<p>If this policy changes materially, the updated version will be published at this URL with a new effective date.</p>
+<footer><a href="/">NYCfoodie</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></footer>
+</body>
+</html>`;
+
+const TERMS_HTML = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terms of Service — NYCfoodie</title>
+<style>${LEGAL_STYLE}</style>
+</head>
+<body>
+<h1>Terms of Service — NYCfoodie</h1>
+<div class="draft"><strong>Status:</strong> draft prepared 2026-10-04. Not yet published. This is not legal advice — please review before publishing.</div>
+<p class="meta"><strong>Effective date:</strong> ${LEGAL_EFFECTIVE_DATE}<br><strong>Contact:</strong> ${LEGAL_CONTACT_EMAIL}</p>
+<h2>1. The service</h2>
+<p>NYCfoodie is a free, public MCP (Model Context Protocol) server providing structured editorial restaurant recommendations for New York City. It is a personal project, provided as-is, with no guarantee of availability, accuracy, or continuity. The operator may modify, rate-limit, suspend, or discontinue the service at any time without notice.</p>
+<h2>2. Acceptable use</h2>
+<p>You agree not to:</p>
+<ul>
+<li>use the service for any unlawful purpose;</li>
+<li>attempt to disrupt, overload, or degrade the service (including aggressive automated scraping of the underlying dataset);</li>
+<li>misrepresent the service as your own, or imply endorsement by the operator;</li>
+<li>attempt to gain unauthorised access to the service's infrastructure or admin endpoints.</li>
+</ul>
+<h2>3. Data and intellectual property</h2>
+<p>Restaurant data is derived from The Infatuation's published restaurant guides, transformed into structured data. Data licensing is currently unresolved. Nothing in these terms grants you rights over the underlying editorial sources. The NYCfoodie software is published as open source at <a href="https://github.com/tireniajilore/nycfoodie">github.com/tireniajilore/nycfoodie</a> under its repository licence.</p>
+<h2>4. Feedback</h2>
+<p>If you or your agent submit feedback via the <code>submit_feedback</code> tool, you grant the operator a perpetual, irrevocable, worldwide licence to use that feedback to operate and improve the service.</p>
+<h2>5. No warranty; limitation of liability</h2>
+<p>The service is provided "as is" without warranties of any kind. Restaurant information (hours, closures, prices, availability) may be out of date — verify before making plans. To the maximum extent permitted by law, the operator is not liable for any damages arising from use of the service.</p>
+<h2>6. Privacy</h2>
+<p>Use of the service is also governed by the Privacy Policy at <a href="https://nycfoodie-production.up.railway.app/privacy">nycfoodie-production.up.railway.app/privacy</a>. There are no accounts; we collect only anonymous usage analytics and operational logs as described there.</p>
+<h2>7. Changes</h2>
+<p>These terms may be updated at any time; the current version will always be published at <a href="https://nycfoodie-production.up.railway.app/terms">nycfoodie-production.up.railway.app/terms</a>. Continued use of the service after changes take effect constitutes acceptance.</p>
+<footer><a href="/">NYCfoodie</a> · <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a></footer>
+</body>
+</html>`;
 
 function handleLanding(res: ServerResponse): void {
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
@@ -387,6 +493,16 @@ const httpServer = createServer((req, res) => {
   if (url.pathname === "/llms.txt" && req.method === "GET") {
     res.writeHead(200, { "Content-Type": "text/markdown; charset=utf-8" });
     res.end(LLMS_TXT);
+    return;
+  }
+  if (url.pathname === "/privacy" && req.method === "GET") {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(PRIVACY_HTML);
+    return;
+  }
+  if (url.pathname === "/terms" && req.method === "GET") {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    res.end(TERMS_HTML);
     return;
   }
   if (url.pathname === "/robots.txt" && req.method === "GET") {
