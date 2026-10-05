@@ -47,11 +47,32 @@ export function hashClient(ip: string, userAgent: string): string {
   return createHash("sha256").update(`${ip}|${userAgent}`).digest("hex").slice(0, 16);
 }
 
+/**
+ * Reduce a User-Agent to product tokens: strip parenthesised platform
+ * details ("Mozilla/5.0 (Windows NT 10.0; Win64; x64)" -> "Mozilla/5.0"),
+ * collapse whitespace, cap length. Returns null when nothing useful
+ * remains. Stored only in this reduced form: it carries no more
+ * identifying info than the client's self-reported name/version.
+ */
+export function cleanUserAgent(ua: string): string | null {
+  const cleaned = ua
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 120);
+  return cleaned ? cleaned : null;
+}
+
 export interface UsageEntry {
   ts: string;
   tool: string;
   city: string | null;
   clientHash: string | null;
+  /** Software identity from the MCP initialize handshake (nullable). */
+  clientName: string | null;
+  clientVersion: string | null;
+  /** Reduced user agent (platform details stripped), nullable. */
+  userAgent: string | null;
   latencyMs: number;
   ok: boolean;
 }
@@ -62,13 +83,16 @@ export interface UsageEntry {
 export function recordUsage(db: Database, entry: UsageEntry): void {
   try {
     db.prepare(
-      `INSERT INTO usage_log (ts, tool, city, client_hash, latency_ms, ok)
-       VALUES (?, ?, ?, ?, ?, ?)`
+      `INSERT INTO usage_log (ts, tool, city, client_hash, client_name, client_version, user_agent, latency_ms, ok)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       entry.ts,
       entry.tool,
       entry.city,
       entry.clientHash,
+      entry.clientName,
+      entry.clientVersion,
+      entry.userAgent,
       entry.latencyMs,
       entry.ok ? 1 : 0
     );
