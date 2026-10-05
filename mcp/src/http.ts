@@ -95,9 +95,10 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
   }
   // The MCP initialize handshake carries clientInfo (client name/version).
   // The transport is stateless, so the identity is remembered per client
-  // fingerprint and attached to that client's later tool calls.
-  if (body !== undefined) rememberClientIdentity(clientHash, body);
-  const identity = clientIdentities.get(clientHash);
+  // and attached to that client's later tool calls (two-level lookup:
+  // fingerprint first, user agent as fallback).
+  if (body !== undefined) rememberClientIdentity(clientHash, userAgent, body);
+  const identity = lookupIdentity(clientHash, userAgent);
   const server: McpServer = createMcpServer({
     clientIp,
     userAgent,
@@ -125,14 +126,44 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
 
 /**
  * Client software identity remembered from MCP initialize handshakes.
- * Keyed by the anonymised client fingerprint (the same truncated hash
- * stored on usage rows): distinct fingerprints already approximate
- * distinct clients, so no new correlator is introduced. Bounded with
- * FIFO eviction; a restart simply re-learns identities on the next
- * handshake, and calls made before that record nulls.
+ * Two-level lookup:
+ *  - byHash: keyed by the anonymised client fingerprint (truncated hash of
+ *    IP + user agent). Precise: distinct fingerprints already approximate
+ *    distinct clients, so no new correlator is introduced.
+ *  - byUserAgent: keyed by the raw User-Agent header. Fallback for clients
+ *    whose IP is not stable across requests (rotating egress IPs, or a
+ *    proxy whose internal address varies per connection — observed live:
+ *    successive requests with one UA hashed differently). Software
+ *    identity is a property of the software, not the client, so sharing
+ *    it across fingerprints with one UA is the right granularity.
+ * Both maps are bounded with FIFO eviction. A restart simply re-learns
+ * identities on the next handshake; calls made before that record nulls.
+ * In-memory only: a multi-instance deploy may miss identities when the
+ * handshake and the tool call land on different instances (fail-safe:
+ * nulls, never a wrong attribution).
  */
-const clientIdentities = new Map<string, { name: string | null; version: string | null }>();
+const identitiesByHash = new Map<string, { name: string | null; version: string | null }>();
+const identitiesByUA = new Map<string, { name: string | null; version: string | null }>();
 const MAX_REMEMBERED_CLIENTS = 5000;
+
+function rememberIdentity(
+  map: Map<string, { name: string | null; version: string | null }>,
+  key: string,
+  ident: { name: string | null; version: string | null }
+): void {
+  if (!map.has(key) && map.size >= MAX_REMEMBERED_CLIENTS) {
+    const oldest = map.keys().next();
+    if (!oldest.done) map.delete(oldest.value);
+  }
+  map.set(key, ident);
+}
+
+function lookupIdentity(
+  clientHash: string,
+  userAgent: string
+): { name: string | null; version: string | null } | undefined {
+  return identitiesByHash.get(clientHash) ?? identitiesByUA.get(userAgent);
+}
 
 function cleanIdentityPart(v: unknown): string | null {
   return typeof v === "string" && v.trim() ? v.trim().slice(0, 100) : null;
@@ -140,10 +171,11 @@ function cleanIdentityPart(v: unknown): string | null {
 
 /**
  * Snoop JSON-RPC initialize requests for params.clientInfo and remember
- * the software identity under the client fingerprint. Never throws —
- * snooping must not break serving.
+ * the software identity under both the client fingerprint and the
+ * user agent (see the two-level map above). Never throws — snooping
+ * must not break serving.
  */
-function rememberClientIdentity(clientHash: string, body: unknown): void {
+function rememberClientIdentity(clientHash: string, userAgent: string, body: unknown): void {
   try {
     const messages = Array.isArray(body) ? body : [body];
     for (const m of messages) {
@@ -156,11 +188,9 @@ function rememberClientIdentity(clientHash: string, body: unknown): void {
       const name = cleanIdentityPart(msg.params?.clientInfo?.name);
       const version = cleanIdentityPart(msg.params?.clientInfo?.version);
       if (name === null && version === null) continue;
-      if (!clientIdentities.has(clientHash) && clientIdentities.size >= MAX_REMEMBERED_CLIENTS) {
-        const oldest = clientIdentities.keys().next();
-        if (!oldest.done) clientIdentities.delete(oldest.value);
-      }
-      clientIdentities.set(clientHash, { name, version });
+      const ident = { name, version };
+      rememberIdentity(identitiesByHash, clientHash, ident);
+      rememberIdentity(identitiesByUA, userAgent, ident);
     }
   } catch {
     // Ignore: telemetry snooping never breaks serving.
