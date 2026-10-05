@@ -34,7 +34,7 @@ import {
   topRated,
   type Filters,
 } from "./queries.js";
-import { createCallLogger, hashClient, recordUsage, saveFeedback, type CallLogger } from "./telemetry.js";
+import { createCallLogger, cleanUserAgent, hashClient, recordUsage, saveFeedback, type CallLogger } from "./telemetry.js";
 
 const dbPath =
   process.env.NYCFOODIE_DB ?? new URL("../../nycfoodie.db", import.meta.url).pathname;
@@ -506,6 +506,11 @@ export interface McpServerOptions {
   clientIp?: string;
   /** Client user-agent as seen by the HTTP layer (never stored raw). */
   userAgent?: string;
+  /** Client software identity from the MCP initialize handshake's
+   *  clientInfo. Null when the handshake wasn't seen (e.g. server
+   *  restarted mid-session) or the client sent none. */
+  clientName?: string | null;
+  clientVersion?: string | null;
 }
 
 /** Build a fully-registered MCP server. One instance per transport. */
@@ -555,7 +560,8 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
   }
 
   /** Wrap a tool handler with call logging (timing, args, errors) plus a
-   *  privacy-respecting usage row (tool, city, client fingerprint — no args). */
+   *  privacy-respecting usage row (tool, city, client fingerprint, client
+   *  software identity — no args). */
   function logged<TArgs extends Record<string, unknown>, TResult>(
     name: string,
     fn: (args: TArgs) => Promise<TResult>
@@ -569,6 +575,9 @@ export function createMcpServer(opts: McpServerOptions = {}): McpServer {
           tool: name,
           city,
           clientHash,
+          clientName: opts.clientName ?? null,
+          clientVersion: opts.clientVersion ?? null,
+          userAgent: cleanUserAgent(opts.userAgent ?? ""),
           latencyMs: Date.now() - start,
           ok,
         });
@@ -906,9 +915,14 @@ export interface UsageStats {
     days_active: number;
     first_seen: string;
     last_seen: string;
+    /** Most common client software identity seen for this fingerprint in
+     *  the window (from the MCP initialize handshake). Null when none of
+     *  the client's calls carried an identity. */
+    client_name: string | null;
+    client_version: string | null;
     per_tool: { tool: string; calls: number }[];
   }[];
-  recent: { ts: string; tool: string; city: string | null; client_hash: string | null; latency_ms: number | null; ok: number }[];
+  recent: { ts: string; tool: string; city: string | null; client_hash: string | null; client_name: string | null; client_version: string | null; user_agent: string | null; latency_ms: number | null; ok: number }[];
 }
 
 /**
@@ -998,17 +1012,46 @@ export function readUsageStats(days = 30): UsageStats {
     arr.push({ tool: r.tool, calls: r.calls });
     toolsByClient.set(key, arr);
   }
-  const perClient = clientRows.map((r) => ({
-    client_hash: r.client_hash,
-    total_calls: r.calls,
-    days_active: r.days_active,
-    first_seen: r.first_seen,
-    last_seen: r.last_seen,
-    per_tool: toolsByClient.get(r.client_hash ?? "\0") ?? [],
-  }));
+  // Most common software identity per client over the same top-200 set:
+  // first row per hash wins (highest count; name/version tie-break keeps
+  // it deterministic). NULLs group like any other value, so a client seen
+  // mostly before identities existed still reports null honestly.
+  const clientNames = db
+    .prepare(
+      `SELECT u.client_hash, u.client_name, u.client_version, COUNT(*) AS n
+       FROM usage_log u
+       WHERE u.ts >= ? AND ${hashPred}
+       GROUP BY u.client_hash, u.client_name, u.client_version
+       ORDER BY n DESC, u.client_name, u.client_version`
+    )
+    .all(since, ...nonNullHashes) as {
+    client_hash: string | null;
+    client_name: string | null;
+    client_version: string | null;
+    n: number;
+  }[];
+  const nameByClient = new Map<string, { name: string | null; version: string | null }>();
+  for (const r of clientNames) {
+    const key = r.client_hash ?? "\0";
+    if (!nameByClient.has(key))
+      nameByClient.set(key, { name: r.client_name, version: r.client_version });
+  }
+  const perClient = clientRows.map((r) => {
+    const ident = nameByClient.get(r.client_hash ?? "\0");
+    return {
+      client_hash: r.client_hash,
+      total_calls: r.calls,
+      days_active: r.days_active,
+      first_seen: r.first_seen,
+      last_seen: r.last_seen,
+      client_name: ident?.name ?? null,
+      client_version: ident?.version ?? null,
+      per_tool: toolsByClient.get(r.client_hash ?? "\0") ?? [],
+    };
+  });
   const recent = db
     .prepare(
-      `SELECT ts, tool, city, client_hash, latency_ms, ok FROM usage_log
+      `SELECT ts, tool, city, client_hash, client_name, client_version, user_agent, latency_ms, ok FROM usage_log
        ORDER BY id DESC LIMIT 50`
     )
     .all() as UsageStats["recent"];

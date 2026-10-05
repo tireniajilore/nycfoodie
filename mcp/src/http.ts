@@ -15,6 +15,7 @@ import { timingSafeEqual } from "node:crypto";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { createMcpServer, readFeedback, readUsageStats } from "./server.js";
+import { hashClient } from "./telemetry.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
 const RPM = Number(process.env.RATE_LIMIT_RPM ?? 120);
@@ -81,8 +82,28 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
     (typeof fwd === "string" ? fwd.split(",")[0].trim() : "") ||
     req.socket.remoteAddress ||
     "unknown";
-  const userAgent = req.headers["user-agent"] ?? "";
-  const server: McpServer = createMcpServer({ clientIp, userAgent });
+  const rawUa = req.headers["user-agent"];
+  const userAgent = Array.isArray(rawUa) ? rawUa.join(" ") : (rawUa ?? "");
+  const clientHash = hashClient(clientIp, userAgent);
+  let body: unknown;
+  try {
+    body = req.method === "POST" ? await readBody(req) : undefined;
+  } catch (err) {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: String((err as Error)?.message ?? err).slice(0, 200) }));
+    return;
+  }
+  // The MCP initialize handshake carries clientInfo (client name/version).
+  // The transport is stateless, so the identity is remembered per client
+  // fingerprint and attached to that client's later tool calls.
+  if (body !== undefined) rememberClientIdentity(clientHash, body);
+  const identity = clientIdentities.get(clientHash);
+  const server: McpServer = createMcpServer({
+    clientIp,
+    userAgent,
+    clientName: identity?.name ?? null,
+    clientVersion: identity?.version ?? null,
+  });
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   // Best-effort teardown of the per-request MCP server + transport.
   const teardown = () => {
@@ -92,7 +113,6 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
   res.on("close", teardown);
   try {
     await server.connect(transport);
-    const body = req.method === "POST" ? await readBody(req) : undefined;
     await transport.handleRequest(req, res, body);
   } catch (err) {
     if (!res.headersSent) {
@@ -100,6 +120,50 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse): Promise<voi
       res.end(JSON.stringify({ error: String((err as Error)?.message ?? err).slice(0, 200) }));
     }
     await teardown();
+  }
+}
+
+/**
+ * Client software identity remembered from MCP initialize handshakes.
+ * Keyed by the anonymised client fingerprint (the same truncated hash
+ * stored on usage rows): distinct fingerprints already approximate
+ * distinct clients, so no new correlator is introduced. Bounded with
+ * FIFO eviction; a restart simply re-learns identities on the next
+ * handshake, and calls made before that record nulls.
+ */
+const clientIdentities = new Map<string, { name: string | null; version: string | null }>();
+const MAX_REMEMBERED_CLIENTS = 5000;
+
+function cleanIdentityPart(v: unknown): string | null {
+  return typeof v === "string" && v.trim() ? v.trim().slice(0, 100) : null;
+}
+
+/**
+ * Snoop JSON-RPC initialize requests for params.clientInfo and remember
+ * the software identity under the client fingerprint. Never throws —
+ * snooping must not break serving.
+ */
+function rememberClientIdentity(clientHash: string, body: unknown): void {
+  try {
+    const messages = Array.isArray(body) ? body : [body];
+    for (const m of messages) {
+      if (typeof m !== "object" || m === null) continue;
+      const msg = m as {
+        method?: unknown;
+        params?: { clientInfo?: { name?: unknown; version?: unknown } };
+      };
+      if (msg.method !== "initialize") continue;
+      const name = cleanIdentityPart(msg.params?.clientInfo?.name);
+      const version = cleanIdentityPart(msg.params?.clientInfo?.version);
+      if (name === null && version === null) continue;
+      if (!clientIdentities.has(clientHash) && clientIdentities.size >= MAX_REMEMBERED_CLIENTS) {
+        const oldest = clientIdentities.keys().next();
+        if (!oldest.done) clientIdentities.delete(oldest.value);
+      }
+      clientIdentities.set(clientHash, { name, version });
+    }
+  } catch {
+    // Ignore: telemetry snooping never breaks serving.
   }
 }
 
@@ -282,17 +346,21 @@ function handleAdminUsage(req: IncomingMessage, res: ServerResponse, url: URL): 
         <span class="bnum">${t.calls}</span></div>`
     )
     .join("");
+  const softwareOf = (name: string | null, version: string | null): string =>
+    [name, version].filter((p): p is string => !!p).join(" ") || "—";
   const recentRows = stats.recent
     .map(
       (r) => `<tr><td>${escHtml(r.ts.replace("T", " ").slice(0, 19))}</td>
         <td>${escHtml(r.tool)}</td><td>${escHtml(r.city ?? "—")}</td>
         <td><code>${escHtml(r.client_hash ?? "—")}</code></td>
+        <td>${escHtml(softwareOf(r.client_name, r.client_version))}</td>
         <td>${r.latency_ms ?? "—"} ms</td><td>${r.ok ? "ok" : "error"}</td></tr>`
     )
     .join("");
   const clientRows = stats.per_client
     .map(
       (c) => `<tr><td><code>${escHtml(c.client_hash ?? "—")}</code></td>
+        <td>${escHtml(softwareOf(c.client_name, c.client_version))}</td>
         <td>${c.total_calls}</td><td>${c.days_active}</td>
         <td>${escHtml(c.first_seen.replace("T", " ").slice(0, 19))}</td>
         <td>${escHtml(c.last_seen.replace("T", " ").slice(0, 19))}</td>
@@ -335,14 +403,15 @@ ${dayRows || "<p>No usage recorded yet.</p>"}
 <h2>Calls per tool</h2>
 ${toolRows || "<p>No usage recorded yet.</p>"}
 <h2>Calls per client</h2>
-<table><thead><tr><th>Client</th><th>Calls</th><th>Days active</th><th>First seen (UTC)</th><th>Last seen (UTC)</th><th>Tools</th></tr></thead>
-<tbody>${clientRows || '<tr><td colspan="6">No usage recorded yet.</td></tr>'}</tbody></table>
+<table><thead><tr><th>Client</th><th>Software</th><th>Calls</th><th>Days active</th><th>First seen (UTC)</th><th>Last seen (UTC)</th><th>Tools</th></tr></thead>
+<tbody>${clientRows || '<tr><td colspan="7">No usage recorded yet.</td></tr>'}</tbody></table>
 <h2>Recent calls</h2>
-<table><thead><tr><th>Time (UTC)</th><th>Tool</th><th>City</th><th>Client</th><th>Latency</th><th>Status</th></tr></thead>
-<tbody>${recentRows || '<tr><td colspan="6">No usage recorded yet.</td></tr>'}</tbody></table>
+<table><thead><tr><th>Time (UTC)</th><th>Tool</th><th>City</th><th>Client</th><th>Software</th><th>Latency</th><th>Status</th></tr></thead>
+<tbody>${recentRows || '<tr><td colspan="7">No usage recorded yet.</td></tr>'}</tbody></table>
 <p class="note">Clients are counted by an anonymised fingerprint (a truncated hash of IP + user agent), so the
 client count is an approximation of people, not an exact headcount — MCP clients don't identify users.
-No query text, IPs or user agents are stored.</p>
+"Software" is the client name/version the client reports about itself in the MCP handshake, plus a
+platform-stripped user agent. No query text or IPs are stored.</p>
 </body>
 </html>`;
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
