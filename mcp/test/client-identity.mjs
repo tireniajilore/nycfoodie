@@ -87,10 +87,10 @@ const mcpHeaders = (ua) => ({
   "User-Agent": ua,
 });
 
-async function mcp(port, ua, message) {
+async function mcp(port, ua, message, extraHeaders = {}) {
   const res = await fetch(`http://127.0.0.1:${port}/mcp`, {
     method: "POST",
-    headers: mcpHeaders(ua),
+    headers: { ...mcpHeaders(ua), ...extraHeaders },
     body: JSON.stringify(message),
   });
   assert.equal(res.status, 200, `expected 200 from /mcp, got ${res.status}`);
@@ -147,6 +147,18 @@ test("client identity from initialize lands on usage rows and admin stats", asyn
       const UA_C = "Bare/3.0";
       await mcp(port, UA_C, toolCall(1, "top_rated", { city: "new-york", limit: 1 }));
 
+      // Scenario D: initialize and tool call arrive with different client
+      // IPs (different fingerprints) but the same user agent — the
+      // user-agent fallback must still attach the identity. This is the
+      // rotating-egress-IP case observed live.
+      const UA_D = "Fallback/4.0 (Test)";
+      await mcp(port, UA_D, initialize({ name: "fallback-client", version: "4.0" }), {
+        "X-Forwarded-For": "1.1.1.1",
+      });
+      await mcp(port, UA_D, toolCall(2, "search_restaurants", { city: "new-york", limit: 1 }), {
+        "X-Forwarded-For": "2.2.2.2",
+      });
+
       const stats = await usageStats(port);
       const byUa = new Map(stats.recent.map((r) => [r.user_agent, r]));
 
@@ -168,6 +180,14 @@ test("client identity from initialize lands on usage rows and admin stats", asyn
       assert.equal(c.client_name, null);
       assert.equal(c.client_version, null);
 
+      // D: identity attached via the user-agent fallback even though the
+      // tool call hashed to a different fingerprint than the initialize.
+      const d = byUa.get("Fallback/4.0");
+      assert.ok(d, "expected a recent row for scenario D");
+      assert.equal(d.tool, "search_restaurants");
+      assert.equal(d.client_name, "fallback-client");
+      assert.equal(d.client_version, "4.0");
+
       // per_client carries the most common name/version per fingerprint.
       const pcA = stats.per_client.find((p) => p.client_name === "test-client");
       assert.ok(pcA, "expected a per_client entry for test-client");
@@ -175,7 +195,10 @@ test("client identity from initialize lands on usage rows and admin stats", asyn
       assert.equal(pcA.total_calls, 1);
       assert.deepEqual(pcA.per_tool, [{ tool: "search_restaurants", calls: 1 }]);
       const pcNull = stats.per_client.filter((p) => p.client_name === null);
-      assert.equal(pcNull.length, 2, "scenarios B and C are distinct fingerprints");
+      assert.equal(pcNull.length, 2, "scenarios B and C are distinct null fingerprints");
+      const pcD = stats.per_client.find((p) => p.client_name === "fallback-client");
+      assert.ok(pcD, "expected a per_client entry for fallback-client");
+      assert.equal(pcD.client_version, "4.0");
 
       // Raw platform details must not appear anywhere in the admin payload.
       assert.ok(!JSON.stringify(stats).includes("Secret Platform"));
